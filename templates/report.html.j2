@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regression Report — {{ r.dep_var }}</title>
+  <style>
+    /* ── Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px; line-height: 1.6; color: #1a1a2e;
+      background: #f8f9fa; padding: 24px;
+    }
+    h1 { font-size: 1.6rem; margin-bottom: 4px; color: #1a1a2e; }
+    h2 { font-size: 1.1rem; font-weight: 600; color: #1a1a2e; margin-bottom: 12px; }
+    h3 { font-size: 0.95rem; font-weight: 600; color: #374151; margin-bottom: 8px; }
+    p  { margin-bottom: 8px; color: #374151; }
+    ul { padding-left: 20px; color: #374151; }
+    li { margin-bottom: 4px; }
+
+    /* ── Layout ── */
+    .report-wrap { max-width: 960px; margin: 0 auto; }
+    .report-header { margin-bottom: 28px; }
+    .report-header .subtitle { color: #6b7280; font-size: 0.875rem; }
+
+    .section {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+      padding: 20px 24px; margin-bottom: 20px;
+    }
+    .section-number {
+      display: inline-block; background: #1a1a2e; color: #fff;
+      font-size: 0.75rem; font-weight: 700; border-radius: 4px;
+      padding: 1px 7px; margin-right: 8px; vertical-align: middle;
+    }
+    .section-title {
+      display: flex; align-items: center; margin-bottom: 16px;
+      border-bottom: 1px solid #f3f4f6; padding-bottom: 10px;
+    }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    thead th {
+      text-align: left; padding: 6px 10px; background: #f3f4f6;
+      color: #6b7280; font-weight: 600; font-size: 0.8rem;
+      text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    tbody td { padding: 6px 10px; border-bottom: 1px solid #f3f4f6; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: #fafafa; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .sig { font-weight: 600; }
+
+    /* ── Verdict badges ── */
+    .badge {
+      display: inline-block; font-size: 0.72rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 12px; letter-spacing: 0.04em;
+    }
+    .badge-pass        { background: #d1fae5; color: #065f46; }
+    .badge-fail        { background: #fee2e2; color: #991b1b; }
+    .badge-borderline  { background: #fef3c7; color: #92400e; }
+    .badge-sig         { background: #ede9fe; color: #4c1d95; }
+    .badge-ns          { background: #f3f4f6; color: #6b7280; }
+
+    /* ── Adaptive explanation layer (§ 11) ── */
+    .diag-card {
+      border: 1px solid #e5e7eb; border-radius: 6px;
+      margin-bottom: 14px; overflow: hidden;
+    }
+    .diag-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; background: #fafafa;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .diag-name { font-weight: 600; font-size: 0.9rem; flex: 1; }
+    .diag-stat { font-size: 0.8rem; color: #6b7280; }
+    .diag-body { padding: 10px 14px; }
+    /* Plain explanation — always visible */
+    .diag-plain { font-size: 0.875rem; color: #374151; margin-bottom: 8px; }
+    /* Technical detail — collapsible */
+    details.diag-tech { font-size: 0.8rem; color: #6b7280; }
+    details.diag-tech summary {
+      cursor: pointer; color: #4b5563; font-weight: 500;
+      list-style: none; display: flex; align-items: center; gap: 4px;
+    }
+    details.diag-tech summary::before {
+      content: "▶"; font-size: 0.65rem; transition: transform 0.15s;
+    }
+    details.diag-tech[open] summary::before { content: "▼"; }
+    details.diag-tech .tech-body {
+      margin-top: 8px; padding: 8px 10px;
+      background: #f9fafb; border-radius: 4px;
+      border-left: 3px solid #e5e7eb;
+    }
+    .tech-row { display: flex; gap: 8px; margin-bottom: 4px; }
+    .tech-label { color: #9ca3af; min-width: 100px; }
+    .tech-val { color: #374151; font-variant-numeric: tabular-nums; }
+    .error-note { color: #b91c1c; font-style: italic; }
+    /* VIF per-variable table inside card */
+    .vif-table { font-size: 0.8rem; width: auto; }
+    .vif-table th, .vif-table td { padding: 4px 10px; }
+
+    /* ── Pattern alerts ── */
+    .pattern {
+      border-radius: 6px; padding: 12px 16px; margin-bottom: 14px;
+    }
+    .pattern-high   { background: #fff1f2; border-left: 4px solid #f43f5e; }
+    .pattern-medium { background: #fffbeb; border-left: 4px solid #f59e0b; }
+    .pattern-low    { background: #eff6ff; border-left: 4px solid #3b82f6; }
+    .pattern-title  { font-weight: 700; font-size: 0.875rem; margin-bottom: 4px; }
+    .pattern-interp { font-size: 0.875rem; color: #374151; margin-bottom: 6px; }
+    .pattern-rec    { font-size: 0.875rem; font-style: italic; color: #4b5563; }
+
+    /* ── Remedy lists ── */
+    .remedy-group { margin-bottom: 20px; }
+    .remedy-group-title { font-weight: 600; margin-bottom: 8px; font-size: 0.875rem; }
+    .remedy {
+      border: 1px solid #e5e7eb; border-radius: 6px;
+      padding: 10px 14px; margin-bottom: 8px;
+    }
+    .remedy-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .remedy-num  { color: #9ca3af; font-size: 0.8rem; min-width: 20px; }
+    .remedy-desc { font-weight: 500; font-size: 0.875rem; }
+    .remedy-why  { font-size: 0.8rem; color: #6b7280; margin-left: 28px; }
+
+    /* ── Caveat blocks ── */
+    .caveat {
+      background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px;
+      padding: 10px 14px; margin-bottom: 10px; font-size: 0.875rem; color: #78350f;
+    }
+    .caveat strong { display: block; margin-bottom: 2px; }
+
+    /* ── Success callout ── */
+    .success-callout {
+      background: #ecfdf5; border: 1px solid #6ee7b7; border-radius: 6px;
+      padding: 12px 16px; color: #065f46; font-size: 0.875rem;
+    }
+    .success-callout strong { display: block; margin-bottom: 4px; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+<div class="report-wrap">
+
+  <!-- Header -->
+  <div class="report-header">
+    <h1>📊 Regression Report</h1>
+    <p class="subtitle">
+      Dependent variable: <strong>{{ r.dep_var }}</strong> &nbsp;·&nbsp;
+      Model: {{ r.model_type_label }} &nbsp;·&nbsp;
+      n = {{ r.n_obs }}
+    </p>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 1  Data summary
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">1</span><h2>Data summary</h2>
+    </div>
+    <p>
+      <strong>Observations:</strong> {{ r.n_obs }} &nbsp;
+      <strong>Structure:</strong> Cross-sectional &nbsp;
+      {% if r.missing_strategy %}
+        <strong>Missing data:</strong> Handled via {{ r.missing_strategy }}
+      {% else %}
+        <strong>Missing data:</strong> None detected
+      {% endif %}
+    </p>
+    <h3 style="margin-top:12px;">Descriptive statistics</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Variable</th><th class="num">Mean</th><th class="num">Std dev</th>
+          <th class="num">Min</th><th class="num">Median</th><th class="num">Max</th>
+          <th class="num">Missing</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in r.desc_stats %}
+        <tr>
+          <td>{{ s.variable }}</td>
+          <td class="num">{{ s.mean|fmt_coef }}</td>
+          <td class="num">{{ s.std|fmt_coef }}</td>
+          <td class="num">{{ s.minimum|fmt_coef }}</td>
+          <td class="num">{{ s.median|fmt_coef }}</td>
+          <td class="num">{{ s.maximum|fmt_coef }}</td>
+          <td class="num">{{ s.missing }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 2  Specification
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">2</span><h2>Model specification</h2>
+    </div>
+    <p><strong>Equation:</strong> &nbsp; {{ r.model_equation }}</p>
+    <p style="margin-top:8px;">
+      <strong>Dependent variable:</strong> {{ r.dep_var }}<br>
+      <strong>Independent variables:</strong> {{ r.indep_vars | join(", ") }}
+    </p>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 3  Model selection path
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">3</span><h2>Model selection path</h2>
+    </div>
+    <p>
+      <strong>Selected model:</strong>
+      <span style="font-size:1.05em;font-weight:700;color:#1a5276;">{{ r.model_type_label }}</span>
+      {% if r.entity_col %}
+      &nbsp;·&nbsp; Entity: <code>{{ r.entity_col }}</code> &nbsp;·&nbsp; Time: <code>{{ r.time_col }}</code>
+      {% endif %}
+    </p>
+
+    {# ── Cross-sectional: single-line note ─────────────────────────────── #}
+    {% if not r.bplm %}
+    <p style="color:#555;">{{ r.model_selection_note }}</p>
+    {% endif %}
+
+    {# ── Panel: BP-LM card ────────────────────────────────────────────── #}
+    {% if r.bplm %}
+    {% set lm = r.bplm %}
+    {% set lm_pass = lm.verdict == "pooled_ok" %}
+    <div style="border:1px solid #d5d8dc;border-radius:6px;padding:1em 1.2em;margin-top:1em;">
+      <div style="display:flex;align-items:center;gap:0.8em;margin-bottom:0.5em;">
+        <span style="font-weight:700;">Step 1 — Breusch-Pagan LM Test</span>
+        {% if lm_pass %}
+        <span style="background:#d5f5e3;color:#1e8449;border-radius:4px;padding:2px 8px;font-size:0.82em;font-weight:700;">POOLED OK</span>
+        {% else %}
+        <span style="background:#fadbd8;color:#922b21;border-radius:4px;padding:2px 8px;font-size:0.82em;font-weight:700;">EFFECTS DETECTED</span>
+        {% endif %}
+        <span style="color:#777;font-size:0.9em;">χ²(1) = {{ lm.statistic|fmt_stat }}&ensp;p = {{ lm.p_value|fmt_p }}</span>
+      </div>
+      <p style="margin:0 0 0.4em;">
+        <strong>H₀:</strong> No individual effects (σ²_u = 0) — pooled OLS is consistent.<br>
+        {% if lm_pass %}
+        <strong>Result:</strong> Fail to reject H₀. No significant entity-level heterogeneity was detected. Pooled OLS is used.
+        {% else %}
+        <strong>Result:</strong> H₀ rejected. Individual (entity-level) effects are present. Pooled OLS would be biased — estimating FE and RE models.
+        {% endif %}
+      </p>
+      <details style="margin-top:0.3em;">
+        <summary style="cursor:pointer;color:#2471a3;font-size:0.88em;">Technical detail</summary>
+        <p style="margin:0.5em 0 0;font-size:0.88em;color:#444;">
+          The BP-LM statistic is computed from pooled-OLS residuals as
+          LM = (N·T̄) / (2·(T̄−1)) × (Σᵢ(Σₜêᵢₜ)² / Σᵢ Σₜ êᵢₜ² − 1)².
+          Under H₀ it follows χ²(1). {{ lm.note }}
+        </p>
+      </details>
+    </div>
+    {% endif %}
+
+    {# ── Panel: Hausman card ──────────────────────────────────────────── #}
+    {% if r.hausman %}
+    {% set h = r.hausman %}
+    {% set h_fe = h.verdict == "fe_preferred" %}
+    {% set h_border = h.verdict == "borderline" %}
+    {% set h_re = h.verdict == "re_preferred" %}
+    {% set h_neg = h.statistic is not none and h.statistic < 0 %}
+    <div style="border:1px solid #d5d8dc;border-radius:6px;padding:1em 1.2em;margin-top:0.8em;">
+      <div style="display:flex;align-items:center;gap:0.8em;margin-bottom:0.5em;">
+        <span style="font-weight:700;">Step 2 — Hausman Specification Test</span>
+        {% if h_fe %}
+        <span style="background:#fadbd8;color:#922b21;border-radius:4px;padding:2px 8px;font-size:0.82em;font-weight:700;">FE PREFERRED</span>
+        {% elif h_border %}
+        <span style="background:#fdebd0;color:#784212;border-radius:4px;padding:2px 8px;font-size:0.82em;font-weight:700;">BORDERLINE → FE</span>
+        {% elif h_neg %}
+        <span style="background:#eaecee;color:#555;border-radius:4px;padding:2px 8px;font-size:0.82em;font-weight:700;">INCONCLUSIVE → RE</span>
+        {% else %}
+        <span style="background:#d5f5e3;color:#1e8449;border-radius:4px;padding:2px 8px;font-size:0.82em;font-weight:700;">RE PREFERRED</span>
+        {% endif %}
+        {% if not h_neg %}
+        <span style="color:#777;font-size:0.9em;">χ²({{ h.dof }}) = {{ h.statistic|fmt_stat }}&ensp;p = {{ h.p_value|fmt_p }}</span>
+        {% endif %}
+      </div>
+
+      <p style="margin:0 0 0.4em;">
+        <strong>H₀:</strong> Entity effects are <em>uncorrelated</em> with regressors — RE is consistent and efficient.<br>
+        <strong>H₁:</strong> Correlation exists — RE is biased; FE is the consistent choice.
+      </p>
+
+      {% if h_fe %}
+      <p style="margin:0;color:#922b21;">
+        <strong>Result:</strong> H₀ rejected (p = {{ h.p_value|fmt_p }}).
+        The test found evidence that entity-level characteristics are correlated with your regressors.
+        <strong>Fixed Effects</strong> is the appropriate model — it controls for all time-invariant entity characteristics, whether observed or not.
+      </p>
+      {% elif h_border %}
+      <p style="margin:0;color:#784212;">
+        <strong>Result:</strong> Borderline (p = {{ h.p_value|fmt_p }}).
+        The evidence is ambiguous. <strong>Fixed Effects was chosen conservatively</strong> — FE is always consistent when RE would be, but not vice versa.
+        Consider reporting both FE and RE results for robustness.
+      </p>
+      {% elif h_neg %}
+      <p style="margin:0;color:#555;">
+        <strong>Result:</strong> The Hausman statistic is negative, which can occur in small samples when the covariance matrix difference (V_FE − V_RE) is not positive semi-definite.
+        <strong>Random Effects is used by default</strong> in this case. Treat this result cautiously — consider reporting pooled OLS alongside RE as a robustness check.
+      </p>
+      {% else %}
+      <p style="margin:0;color:#1e8449;">
+        <strong>Result:</strong> Fail to reject H₀ (p = {{ h.p_value|fmt_p }}).
+        No significant evidence that entity effects are correlated with regressors.
+        <strong>Random Effects</strong> is used — it is more efficient than FE when RE is consistent, because it also uses the between-entity variation.
+      </p>
+      {% endif %}
+
+      <details style="margin-top:0.6em;">
+        <summary style="cursor:pointer;color:#2471a3;font-size:0.88em;">Technical detail</summary>
+        <p style="margin:0.5em 0 0;font-size:0.88em;color:#444;">
+          Hausman statistic: H = (b_FE − b_RE)ᵀ (V_FE − V_RE)⁻¹ (b_FE − b_RE) ~ χ²({{ h.dof }}).
+          Degrees of freedom = number of time-varying common regressors ({{ h.dof }}).
+          If V_FE − V_RE is not positive definite, the Moore-Penrose pseudoinverse is used and DOF is adjusted to the matrix rank.
+          {{ h.note }}
+        </p>
+      </details>
+    </div>
+
+    <p style="margin-top:0.9em;font-size:0.9em;color:#555;">
+      <strong>Intuition:</strong>
+      FE removes all between-entity variation, estimating effects purely from how each entity changes over time.
+      RE treats entity effects as random draws from a distribution and pools within- and between-entity variation for greater efficiency.
+      The Hausman test checks whether that between-entity variation is "safe" to use — if entity characteristics are correlated with your regressors, using it would bias RE estimates.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 4  Regression results
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">4</span><h2>Regression results</h2>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Variable</th>
+          <th class="num">Estimate</th><th class="num">Std Error</th>
+          <th class="num">t-stat</th><th class="num">p-value</th>
+          <th class="num">95% CI lower</th><th class="num">95% CI upper</th>
+          <th>Sig.</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in r.coefficients %}
+        <tr class="{{ 'sig' if c.significant else '' }}">
+          <td>{{ c.variable }}</td>
+          <td class="num {{ 'sig' if c.significant else '' }}">{{ c.estimate|fmt_coef }}</td>
+          <td class="num">{{ c.std_err|fmt_coef }}</td>
+          <td class="num">{{ c.t_stat|fmt_stat }}</td>
+          <td class="num">{{ c.p_value|fmt_p }}</td>
+          <td class="num">{{ c.ci_lower|fmt_coef }}</td>
+          <td class="num">{{ c.ci_upper|fmt_coef }}</td>
+          <td>
+            {% if c.significant %}
+              <span class="badge badge-sig">p&lt;0.05</span>
+            {% else %}
+              <span class="badge badge-ns">n.s.</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p style="margin-top:12px; font-size:0.875rem; color:#6b7280;">
+      R² = <strong>{{ r.rsquared|fmt_coef }}</strong> &nbsp;·&nbsp;
+      Adj. R² = <strong>{{ r.rsquared_adj|fmt_coef }}</strong> &nbsp;·&nbsp;
+      F({{ r.coefficients|length - 1 }}, {{ r.n_obs - r.coefficients|length }}) = <strong>{{ r.fvalue|fmt_stat }}</strong>,
+      p = <strong>{{ r.f_pvalue|fmt_p }}</strong> &nbsp;·&nbsp;
+      n = <strong>{{ r.n_obs }}</strong>
+    </p>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 5  Diagnostics dashboard
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">5</span><h2>Diagnostics dashboard</h2>
+    </div>
+
+    {% for d in r.diagnostic_results %}
+    <div class="diag-card">
+      <!-- Tier 1: verdict — always visible -->
+      <div class="diag-header">
+        <span class="diag-name">{{ d.test_name }}</span>
+        <span class="diag-stat">
+          {% if d.statistic is not none %}Stat = {{ d.statistic|fmt_stat }}{% endif %}
+          {% if d.p_value is not none %}&nbsp; p = {{ d.p_value|fmt_p }}{% endif %}
+        </span>
+        <span class="badge badge-{{ d.verdict }}">{{ d.verdict | upper }}</span>
+      </div>
+
+      <div class="diag-body">
+        <!-- Tier 2: plain explanation — always visible -->
+        <p class="diag-plain">{{ d.plain_explanation }}</p>
+
+        {% if d.error %}
+        <p class="error-note">⚠ {{ d.error }}</p>
+        {% endif %}
+
+        <!-- Tier 3: technical detail — collapsible -->
+        <details class="diag-tech">
+          <summary>Technical detail</summary>
+          <div class="tech-body">
+            <p style="margin-bottom:8px;">{{ d.technical_note }}</p>
+
+            {% if d.test_id == 'vif' and d.details.per_variable is defined %}
+              <table class="vif-table">
+                <thead>
+                  <tr><th>Variable</th><th class="num">VIF</th><th>Flag</th></tr>
+                </thead>
+                <tbody>
+                  {% for entry in d.details.per_variable %}
+                  <tr>
+                    <td>{{ entry.variable }}</td>
+                    <td class="num">{{ entry.vif }}</td>
+                    <td>
+                      {% if entry.verdict == 'concern' %}
+                        <span class="badge badge-fail">concern (>10)</span>
+                      {% elif entry.verdict == 'examine' %}
+                        <span class="badge badge-borderline">examine (5–10)</span>
+                      {% else %}
+                        <span class="badge badge-pass">ok</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              {% for key, val in d.details.items() %}
+                {% if val and val != '' %}
+                <div class="tech-row">
+                  <span class="tech-label">{{ key | replace('_', ' ') | title }}</span>
+                  <span class="tech-val">{{ val }}</span>
+                </div>
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+          </div>
+        </details>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 6  Issues found
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">6</span>
+      <h2>{{ "Issues found" if not r.all_pass else "No issues identified" }}</h2>
+    </div>
+
+    {% if r.all_pass %}
+      <div class="success-callout">
+        <strong>All diagnostic tests passed.</strong>
+        The model satisfies the standard OLS assumptions. Coefficients are
+        unbiased, standard errors are reliable, and significance tests are valid
+        under these conditions.
+      </div>
+    {% else %}
+      {% if r.remediation.patterns %}
+        <h3 style="margin-bottom:10px;">Cross-diagnostic patterns detected</h3>
+        {% for p in r.remediation.patterns %}
+        <div class="pattern pattern-{{ p.severity }}">
+          <div class="pattern-title">
+            ⚑ {{ p.id | replace('_', ' ') | title }}
+            &nbsp;<span class="badge badge-{{ 'fail' if p.severity == 'high' else 'borderline' }}">{{ p.severity }}</span>
+          </div>
+          <p class="pattern-interp">{{ p.interpretation }}</p>
+          <p class="pattern-rec"><strong>Recommendation:</strong> {{ p.recommendation }}</p>
+        </div>
+        {% endfor %}
+      {% endif %}
+
+      <h3 style="margin-top:12px; margin-bottom:10px;">Individual test failures</h3>
+      {% for tr in r.remediation.per_test %}
+      <p>
+        <span class="badge badge-{{ tr.verdict }}">{{ tr.verdict | upper }}</span>
+        &nbsp;<strong>{{ tr.test_name }}</strong> —
+        {% set d = r.diagnostic_results | selectattr('test_id', 'eq', tr.test_id) | first %}
+        {{ d.plain_explanation }}
+      </p>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 7  Recommendations
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">7</span>
+      <h2>{{ "Recommendations" if not r.all_pass else "Notes on interpretation" }}</h2>
+    </div>
+
+    {% if r.all_pass %}
+      <p>
+        With all diagnostics passing, the coefficient estimates and their
+        standard errors can be taken at face value. When reporting:
+      </p>
+      <ul style="margin-top:8px;">
+        <li>Report coefficients with 95% confidence intervals, not just p-values.</li>
+        <li>A statistically insignificant coefficient means the data are insufficient
+            to rule out a zero effect — it does not mean the effect is zero.</li>
+        <li>R² measures variance explained, not causal validity. A high R² can
+            coexist with a poorly specified model.</li>
+      </ul>
+    {% else %}
+      {% for tr in r.remediation.per_test %}
+      <div class="remedy-group">
+        <p class="remedy-group-title">
+          <span class="badge badge-{{ tr.verdict }}">{{ tr.verdict | upper }}</span>
+          &nbsp;{{ tr.test_name }}
+        </p>
+        {% for rem in tr.remedies %}
+        <div class="remedy">
+          <div class="remedy-header">
+            <span class="remedy-num">{{ rem.priority }}.</span>
+            <span class="remedy-desc">{{ rem.description }}</span>
+            <span class="badge {{ 'badge-pass' if rem.kind == 'quick_fix' else 'badge-ns' }}">
+              {{ "quick fix" if rem.kind == 'quick_fix' else "thinking fix" }}
+            </span>
+          </div>
+          <p class="remedy-why">{{ rem.why }}</p>
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       § 8  Caveats
+  ══════════════════════════════════════════════ -->
+  <div class="section">
+    <div class="section-title">
+      <span class="section-number">8</span><h2>Caveats</h2>
+    </div>
+
+    {% if r.all_pass %}
+      <div class="caveat">
+        <strong>Diagnostics passing does not guarantee a good model.</strong>
+        These tests check statistical assumptions, not theoretical validity.
+        Ensure your variable selection is grounded in theory, not just data fit.
+      </div>
+      <div class="caveat">
+        <strong>Cross-sectional data and causality.</strong>
+        OLS on cross-sectional data estimates associations, not causal effects.
+        Confounding, reverse causality, and omitted variable bias can all be present
+        even when diagnostics pass.
+      </div>
+    {% else %}
+      {% for tr in r.remediation.per_test %}
+      {% if tr.honest_caveat %}
+      <div class="caveat">
+        <strong>{{ tr.test_name }}</strong>
+        {{ tr.honest_caveat }}
+      </div>
+      {% endif %}
+      {% endfor %}
+      <div class="caveat">
+        <strong>Remediation is advisory, not automatic.</strong>
+        This tool presents ranked remedies but does not re-estimate the model.
+        Each change to the specification is a modelling decision that requires
+        theoretical justification — not just a mechanical response to a failed test.
+      </div>
+    {% endif %}
+  </div>
+
+</div><!-- /report-wrap -->
+</body>
+</html>

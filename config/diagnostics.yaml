@@ -1,0 +1,429 @@
+# Diagnostic test catalog — cross-sectional pipeline (Phase 1).
+# The runner in regassist/diagnostics.py reads thresholds and explanations.
+# The remediation engine in regassist/remediate.py reads remedies, caveats,
+# and cross_patterns.
+
+diagnostics:
+
+  - id: vif
+    name: "Variance Inflation Factor"
+    applies_to: [ols, fe, re]
+    threshold_concern: 10
+    threshold_examine: 5
+    plain_explanation: >
+      Checks whether your independent variables are too similar to each other.
+      High VIF inflates standard errors and makes individual coefficients unreliable.
+    technical_note: >
+      VIF = 1 / (1 - R²ⱼ), where R²ⱼ is the R² from regressing variable j on
+      all other predictors. Values above 10 indicate serious multicollinearity;
+      values 5–10 warrant examination.
+    honest_caveat: >
+      High VIF on control variables does not necessarily invalidate your results.
+      If the variable of interest has a low VIF, its coefficient is still reliable
+      even if controls are collinear with each other. Report judgment, not just numbers.
+    remedies:
+      - priority: 1
+        kind: thinking_fix
+        description: "Drop one of the collinear variables"
+        why: >
+          Removing a redundant predictor directly eliminates the source of collinearity.
+          Drop the variable that is least central to your research question.
+      - priority: 2
+        kind: thinking_fix
+        description: "Combine collinear variables into a composite index"
+        why: >
+          If two variables measure the same underlying concept, averaging or
+          using PCA to create a single index preserves their joint information
+          while eliminating the redundancy that inflates VIF.
+      - priority: 3
+        kind: quick_fix
+        description: "Check for over-specified dummy variables"
+        why: >
+          Including all categories of a categorical variable (the 'dummy variable
+          trap') creates perfect collinearity. Drop one category as the reference group.
+      - priority: 4
+        kind: quick_fix
+        description: "Mean-center continuous variables before creating interactions"
+        why: >
+          Interaction terms are often highly correlated with their constituent
+          variables. Subtracting the mean from each variable before multiplying
+          reduces this artificial collinearity without changing the model's substance.
+      - priority: 5
+        kind: thinking_fix
+        description: "Investigate whether two variables measure the same construct"
+        why: >
+          Conceptual overlap between predictors is the root cause of most
+          multicollinearity. If two variables are theoretically the same thing,
+          including both is a specification error, not just a statistical problem.
+
+  - id: breusch_pagan
+    name: "Breusch-Pagan / Cook-Weisberg"
+    applies_to: [ols, fe, re]
+    threshold: 0.05
+    borderline_low: 0.04
+    borderline_high: 0.06
+    plain_explanation: >
+      Checks whether the spread of your residuals is constant across fitted values
+      (homoskedasticity). Failure means your standard errors are wrong, making
+      significance tests unreliable — even though coefficients are still unbiased.
+    technical_note: >
+      Tests H₀: error variance is constant (homoskedastic). Uses an auxiliary
+      regression of squared residuals on the original regressors. Reports the
+      LM statistic and its χ² p-value.
+    honest_caveat: >
+      Robust standard errors are nearly always defensible in applied work.
+      Many econometricians use them by default regardless of test results.
+      Applying them does not change your coefficient estimates — only the
+      precision with which they are reported.
+    remedies:
+      - priority: 1
+        kind: quick_fix
+        description: "Apply heteroskedasticity-robust standard errors (HC3 for n < 250, HC1 for n ≥ 250)"
+        why: >
+          Robust (heteroskedasticity-consistent) SEs are valid even when the
+          error variance is non-constant. They fix the unreliable significance
+          tests without changing your coefficients or requiring you to know
+          the exact form of the heteroskedasticity.
+      - priority: 2
+        kind: thinking_fix
+        description: "Log-transform the dependent variable"
+        why: >
+          When variance grows with the level of Y (scale-dependent variance),
+          working in logs stabilises the variance. This often produces residuals
+          that are much closer to homoskedastic.
+      - priority: 3
+        kind: thinking_fix
+        description: "Weighted Least Squares (WLS)"
+        why: >
+          If you know or can estimate the variance structure (e.g., variance
+          proportional to some observable), WLS incorporates that structure
+          directly and produces efficient estimates.
+      - priority: 4
+        kind: thinking_fix
+        description: "Check for omitted variables"
+        why: >
+          Heteroskedasticity often signals a missing predictor whose effect
+          varies systematically. Adding the omitted variable may resolve the
+          variance pattern and improve the model substantively.
+
+  - id: white
+    name: "White Test"
+    applies_to: [ols, fe, re]
+    threshold: 0.05
+    borderline_low: 0.04
+    borderline_high: 0.06
+    plain_explanation: >
+      A more general check for heteroskedasticity that catches nonlinear variance
+      patterns the Breusch-Pagan test can miss. Same consequences if it fails.
+    technical_note: >
+      Tests H₀: homoskedasticity. Auxiliary regression of squared residuals on
+      original regressors, their squares, and cross-products. If White fails
+      while Breusch-Pagan passes, the variance structure is likely nonlinear.
+    honest_caveat: >
+      Same as for Breusch-Pagan: robust SEs are a defensible first response.
+      If White fails while Breusch-Pagan passes, the variance structure is
+      nonlinear — robust SEs still correct the inference, but a log transformation
+      or WLS may produce more efficient estimates.
+    remedies:
+      - priority: 1
+        kind: quick_fix
+        description: "Apply heteroskedasticity-robust standard errors (HC3 for n < 250, HC1 for n ≥ 250)"
+        why: >
+          Robust SEs correct significance tests regardless of the form of
+          heteroskedasticity, including the nonlinear patterns White detects
+          but Breusch-Pagan misses.
+      - priority: 2
+        kind: thinking_fix
+        description: "Log-transform the dependent variable (preferred when White fails but BP passes)"
+        why: >
+          When the variance structure is nonlinear, a log transformation often
+          stabilises it more effectively than plain robust SEs alone, because
+          it addresses the root cause rather than just correcting the SEs.
+      - priority: 3
+        kind: thinking_fix
+        description: "Weighted Least Squares (WLS)"
+        why: >
+          If you can model the variance structure, WLS incorporates it explicitly
+          and produces efficient estimates.
+      - priority: 4
+        kind: thinking_fix
+        description: "Check for omitted variables"
+        why: >
+          As with Breusch-Pagan, heteroskedasticity can signal a missing predictor.
+
+  - id: ramsey_reset
+    name: "Ramsey RESET"
+    applies_to: [ols, fe, re]
+    threshold: 0.05
+    borderline_low: 0.04
+    borderline_high: 0.06
+    plain_explanation: >
+      Checks whether your model is correctly specified. Failure suggests either
+      a nonlinear relationship (a transformation may help) or a missing variable
+      (which no transformation can fix).
+    technical_note: >
+      Regression Equation Specification Error Test. Tests H₀: no omitted
+      nonlinear terms, by adding powers of ŷ (ŷ², ŷ³) as regressors and
+      testing their joint significance via an F-test.
+    honest_caveat: >
+      RESET failure often indicates omitted variable bias, which no functional
+      form transformation can fix. If you have examined residual plots and
+      added reasonable polynomial terms without resolving the failure, the
+      most likely cause is a theoretically important variable that is absent
+      from the model. Be honest about this in your write-up.
+    remedies:
+      - priority: 1
+        kind: quick_fix
+        description: "Examine residual plots before acting"
+        why: >
+          RESET tells you something is wrong but not what. Plotting residuals
+          against each predictor and against fitted values reveals whether the
+          problem is curvature (suggesting a transformation) or random scatter
+          at high leverage points (suggesting outliers or omitted variables).
+      - priority: 2
+        kind: thinking_fix
+        description: "Add polynomial terms (X², X³) for predictors showing curvature"
+        why: >
+          If residual plots show a systematic curve against a predictor, adding
+          a squared term for that predictor directly addresses the nonlinearity
+          the RESET test detected.
+      - priority: 3
+        kind: thinking_fix
+        description: "Log-transform Y, X, or both"
+        why: >
+          Logarithmic transformation can linearise many common nonlinear
+          relationships (e.g., diminishing returns) without requiring polynomial
+          terms, keeping the model more parsimonious.
+      - priority: 4
+        kind: thinking_fix
+        description: "Add interaction terms (if theory suggests effects vary)"
+        why: >
+          If the effect of one predictor depends on the value of another,
+          omitting the interaction is a form of misspecification that RESET
+          can detect. Add interactions where theoretically motivated.
+      - priority: 5
+        kind: thinking_fix
+        description: "Reconsider whether a theoretically important variable is missing"
+        why: >
+          RESET is sensitive to omitted variables whose effect correlates with
+          powers of the fitted values. If transformations do not resolve the
+          failure, the most likely cause is a missing predictor.
+
+  - id: jarque_bera
+    name: "Jarque-Bera"
+    applies_to: [ols, fe, re]
+    threshold: 0.05
+    borderline_low: 0.04
+    borderline_high: 0.06
+    plain_explanation: >
+      Checks whether residuals are normally distributed. For large samples
+      (n > 100) this is rarely actionable — the Central Limit Theorem rescues
+      inference. For small samples (n < 30) it matters more.
+    technical_note: >
+      Tests H₀: residuals are normally distributed, based on skewness and
+      excess kurtosis. JB = n/6 · (S² + K²/4), where S is skewness and K is
+      excess kurtosis. Follows χ²(2) asymptotically.
+    honest_caveat: >
+      Many textbooks overemphasise this test. OLS inference relies on the
+      Central Limit Theorem, not on the assumption that errors are exactly
+      normal — CLT ensures asymptotic normality of the coefficient estimator
+      for large n even when errors are not normal. For n > 100, a failing
+      Jarque-Bera is often not actionable and should be noted but not alarmed at.
+    remedies:
+      - priority: 1
+        kind: quick_fix
+        description: "Check your sample size first"
+        why: >
+          For n > 100, the Central Limit Theorem makes t and F tests reliable
+          even with non-normal residuals. A significant JB statistic in large
+          samples is often a consequence of high statistical power detecting
+          minor departures from normality — not a practical problem.
+      - priority: 2
+        kind: quick_fix
+        description: "Identify and examine outliers"
+        why: >
+          Non-normality in regression residuals most commonly traces to a small
+          number of extreme observations. Identify high-leverage and high-influence
+          points; decide whether they represent data errors or genuine observations.
+      - priority: 3
+        kind: thinking_fix
+        description: "Log-transform Y if the distribution is right-skewed"
+        why: >
+          Right-skewed residuals often arise from a right-skewed outcome variable.
+          A log transformation normalises the distribution of many economic and
+          financial outcomes (income, prices, counts).
+      - priority: 4
+        kind: thinking_fix
+        description: "Use bootstrap inference for small samples (n < 30)"
+        why: >
+          When n is small and residuals are clearly non-normal, bootstrap
+          confidence intervals and hypothesis tests do not rely on the CLT
+          and are more reliable than standard t/F tests.
+
+  - id: wooldridge
+    name: "Wooldridge Serial Correlation"
+    applies_to: [fe, re]
+    threshold: 0.05
+    borderline_low: 0.04
+    borderline_high: 0.06
+    plain_explanation: >
+      Checks whether the errors in your panel model are correlated over time
+      within each entity (serial correlation). If they are, your standard errors
+      understate uncertainty and significance tests become unreliable.
+    technical_note: >
+      Wooldridge (2002) test for AR(1) serial correlation. First-differences the
+      FE/RE residuals within each entity, regresses Δê_it on Δê_{i,t−1}, and
+      F-tests H₀: ρ = −0.5 (the coefficient implied by zero autocorrelation in
+      the undifferenced residuals). Skipped when any entity has fewer than 3 periods.
+    honest_caveat: >
+      Cluster-robust standard errors (clustered by entity) are the most
+      common remedy and are defensible in published work regardless of whether
+      this test fires. They correct for both serial correlation and
+      within-cluster heteroskedasticity simultaneously.
+    remedies:
+      - priority: 1
+        kind: quick_fix
+        description: "Apply cluster-robust standard errors (clustered by entity)"
+        why: >
+          Clustering by entity corrects inference for both serial correlation
+          and within-entity heteroskedasticity without changing coefficient
+          estimates. It is the standard remedy in panel econometrics.
+      - priority: 2
+        kind: thinking_fix
+        description: "Add lagged dependent variable as a regressor"
+        why: >
+          Serial correlation is often a symptom of dynamic misspecification:
+          the level of Y at t−1 belongs in the model. Adding a lag absorbs
+          the autocorrelation structurally, though this requires careful
+          treatment of the Nickell bias in short panels (small T).
+      - priority: 3
+        kind: thinking_fix
+        description: "Use a first-differenced estimator"
+        why: >
+          First-differencing eliminates both fixed effects and AR(1) serial
+          correlation simultaneously if the innovation ε_it is serially
+          uncorrelated. Suitable when T is small (< 10) and N is large.
+
+  - id: modified_wald
+    name: "Modified Wald (Groupwise Heteroskedasticity)"
+    applies_to: [fe]
+    threshold: 0.05
+    borderline_low: 0.04
+    borderline_high: 0.06
+    plain_explanation: >
+      Checks whether the variance of residuals differs across entities in your
+      fixed-effects model. Entity-specific variance (groupwise heteroskedasticity)
+      inflates or deflates standard errors, making significance tests unreliable.
+    technical_note: >
+      Modified Wald statistic: W = Σᵢ Tᵢ·(σ̂²_i − σ̂²)² / (2σ̂⁴) where
+      σ̂²_i = mean squared FE residual for entity i and σ̂² = average across
+      entities. Under H₀ (homoskedastic errors): W ~ χ²(N−1), where N is
+      the number of entities.
+    honest_caveat: >
+      As with Breusch-Pagan for OLS, cluster-robust standard errors (clustered
+      by entity) address groupwise heteroskedasticity without changing coefficient
+      estimates. Many practitioners apply them by default in all panel regressions.
+    remedies:
+      - priority: 1
+        kind: quick_fix
+        description: "Apply cluster-robust standard errors (clustered by entity)"
+        why: >
+          Entity-clustered SEs correct for both groupwise heteroskedasticity
+          and serial correlation. This is the standard first response in panel
+          econometrics and does not affect coefficient estimates.
+      - priority: 2
+        kind: thinking_fix
+        description: "Log-transform the dependent variable"
+        why: >
+          When variance scales with the level of Y across entities, a log
+          transformation often stabilises it. This addresses the root cause
+          rather than just correcting standard errors.
+      - priority: 3
+        kind: thinking_fix
+        description: "Use panel-corrected standard errors (PCSE)"
+        why: >
+          PCSE (Beck & Katz 1995) explicitly models entity-specific variance
+          and is commonly preferred in comparative politics and macro-panel work
+          where T is relatively large.
+
+# ---------------------------------------------------------------------------
+# Cross-diagnostic patterns (spec section 9, FR-5.4)
+# A pattern fires when ALL of its trigger conditions are met.
+# trigger conditions: list of {test_id, verdict} — "verdict" is one of
+#   "fail", "borderline", "fail_or_borderline", "not_pass"
+# ---------------------------------------------------------------------------
+cross_patterns:
+
+  - id: spec_not_inference
+    severity: high
+    triggers:
+      - {test_id: breusch_pagan, verdict: not_pass}
+      - {test_id: ramsey_reset,  verdict: not_pass}
+    interpretation: >
+      Both a heteroskedasticity test and the RESET specification test have
+      failed. This pattern suggests the model has a structural specification
+      problem — not merely an inference (standard error) problem. Applying
+      robust standard errors alone will not be sufficient.
+    recommendation: >
+      Address functional form first: examine residual plots, consider
+      log-transformations or polynomial terms, and check for missing variables.
+      Apply robust SEs only after the specification is credible.
+
+  - id: white_spec_not_inference
+    severity: high
+    triggers:
+      - {test_id: white,        verdict: not_pass}
+      - {test_id: ramsey_reset, verdict: not_pass}
+    interpretation: >
+      The White test and RESET both fail. The nonlinear heteroskedasticity
+      pattern detected by White, combined with the RESET failure, points to
+      misspecification rather than a pure variance problem.
+    recommendation: >
+      Prioritise fixing functional form. Investigate nonlinear relationships
+      and possible omitted variables before correcting standard errors.
+
+  - id: outlier_misspec
+    severity: medium
+    triggers:
+      - {test_id: ramsey_reset, verdict: not_pass}
+      - {test_id: jarque_bera,  verdict: not_pass}
+    interpretation: >
+      RESET and Jarque-Bera both fail. This combination is often driven by
+      outliers — a small number of extreme observations can produce both
+      apparent nonlinearity in fitted values and heavy tails in residuals.
+    recommendation: >
+      Investigate outliers before addressing functional form. Identify
+      high-leverage and high-influence observations. If genuine, consider
+      robust regression or reporting results with and without them.
+
+  - id: full_hetero_and_spec
+    severity: high
+    triggers:
+      - {test_id: breusch_pagan, verdict: not_pass}
+      - {test_id: white,         verdict: not_pass}
+      - {test_id: ramsey_reset,  verdict: not_pass}
+    interpretation: >
+      Breusch-Pagan, White, and RESET all fail simultaneously. This is a
+      strong signal of model misspecification. The variance pattern and the
+      RESET failure are likely symptoms of the same underlying problem:
+      incorrect functional form or important omitted variables.
+    recommendation: >
+      Do not proceed with robust SEs as a primary fix. Revisit the model
+      specification from scratch: examine all residual plots, consider
+      alternative functional forms, and review whether key variables are
+      missing from the model.
+
+  - id: panel_serial_and_hetero
+    severity: high
+    triggers:
+      - {test_id: wooldridge,    verdict: not_pass}
+      - {test_id: modified_wald, verdict: not_pass}
+    interpretation: >
+      Both serial correlation (Wooldridge) and groupwise heteroskedasticity
+      (Modified Wald) are detected in your panel model. These two problems
+      compound each other: standard errors are invalid on two fronts simultaneously.
+    recommendation: >
+      Apply cluster-robust standard errors (clustered by entity) as the primary
+      fix — they correct for both serial correlation and groupwise heteroskedasticity
+      in one step. Re-estimate the chosen model (FE or RE) with clustered SEs
+      and report those instead.
