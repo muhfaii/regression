@@ -85,6 +85,10 @@ class ReportData:
     time_col: str | None = None
     bplm: BPLMResult | None = None
     hausman: HausmanResult | None = None
+    # Standard error variant (None = classical OLS/GLS SEs)
+    se_variant: str | None = None          # e.g. "HC3", "CR1"
+    se_justification: str | None = None   # one-line justification for methods section
+    se_citation: str | None = None        # full citation string
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +166,9 @@ def build_report_data(
         diagnostic_results=diag_results,
         remediation=remediation,
         all_pass=all_pass,
+        se_variant=model.se_variant,
+        se_justification=model.se_justification,
+        se_citation=model.se_citation,
     )
 
 

@@ -427,3 +427,16 @@ cross_patterns:
       fix — they correct for both serial correlation and groupwise heteroskedasticity
       in one step. Re-estimate the chosen model (FE or RE) with clustered SEs
       and report those instead.
+
+# ---------------------------------------------------------------------------
+# Robust SE configuration (read by regassist.robust_se)
+# ---------------------------------------------------------------------------
+robust_se:
+  policy: test_driven        # "test_driven" | "always_robust"
+  hc_thresholds:
+    small_sample_cutoff: 250        # n below this → HC3 regardless of leverage
+    high_leverage_factor: 2         # h_i > factor * k/n → high-leverage
+    extreme_leverage_factor: 4      # h_i > factor * k/n → extreme-leverage → HC3
+  cr_thresholds:
+    standard_cluster_count: 50     # G >= this → CR1
+    minimum_cluster_count: 20      # G in [20, 50) → CR2; G < 20 → CR2 + warning

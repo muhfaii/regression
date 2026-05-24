@@ -57,6 +57,13 @@ class FittedModel:
     # --- FE-specific: variables dropped by drop_absorbed=True ---------------
     absorbed_vars: list[str] = None   # populated by estimate_fe when vars are dropped
 
+    # --- Robust SE metadata (set by regassist.robust_se after application) --
+    se_variant: str | None = None          # e.g. "HC3", "CR1"; None = classical
+    se_justification: str | None = None   # one-line why (methods section text)
+    se_citation: str | None = None        # report-ready citation string
+    leverage_summary: Any = None          # LeverageSummary | None (HC path only)
+    n_clusters: int | None = None         # panel only
+
     def __post_init__(self):
         if self.absorbed_vars is None:
             self.absorbed_vars = []

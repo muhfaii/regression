@@ -344,7 +344,8 @@
       <thead>
         <tr>
           <th>Variable</th>
-          <th class="num">Estimate</th><th class="num">Std Error</th>
+          <th class="num">Estimate</th>
+          <th class="num">{% if r.se_variant %}Std Error ({{ r.se_variant }}){% else %}Std Error{% endif %}</th>
           <th class="num">t-stat</th><th class="num">p-value</th>
           <th class="num">95% CI lower</th><th class="num">95% CI upper</th>
           <th>Sig.</th>
@@ -378,6 +379,14 @@
       p = <strong>{{ r.f_pvalue|fmt_p }}</strong> &nbsp;·&nbsp;
       n = <strong>{{ r.n_obs }}</strong>
     </p>
+    {% if r.se_citation %}
+    <p style="margin-top:8px; font-size:0.875rem; color:#374151;">
+      {{ r.se_citation }}
+      {% if r.se_justification %}
+      <em style="color:#6b7280;">{{ r.se_justification }}</em>
+      {% endif %}
+    </p>
+    {% endif %}
   </div>
 
   <!-- ══════════════════════════════════════════════
