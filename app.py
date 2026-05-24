@@ -41,6 +41,7 @@ defaults = {
     "analysis_error": None,         # persists across rerun so the error stays visible
     "pipeline_warnings": [],        # persists across rerun (e.g. absorbed FE variables)
     "_last_filename": None,
+    "robust_se_override": "Auto",   # HC or CR variant override
 }
 for key, val in defaults.items():
     if key not in st.session_state:
@@ -379,6 +380,36 @@ if dep_var or indep_vars:
 
         st.divider()
 
+        with st.expander("⚙ Advanced — Standard error variant"):
+            _is_panel = (
+                st.session_state.confirmed_structure == "panel"
+                and st.session_state.detection_result.entity_col
+                and st.session_state.detection_result.time_col
+            )
+            if _is_panel:
+                _se_opts = ["Auto", "CR0", "CR1", "CR2"]
+                _se_help = (
+                    "Auto selects CR1 (G ≥ 50) or CR2 (G < 50) when a cluster-robust "
+                    "test fires. Override to force a specific variant."
+                )
+            else:
+                _se_opts = ["Auto", "HC0", "HC1", "HC2", "HC3"]
+                _se_help = (
+                    "Auto selects HC1 or HC3 based on sample size and leverage when "
+                    "a heteroskedasticity test fires. Override to force a specific variant."
+                )
+            st.session_state.robust_se_override = st.selectbox(
+                "Standard error variant",
+                options=_se_opts,
+                index=_se_opts.index(
+                    st.session_state.robust_se_override
+                    if st.session_state.robust_se_override in _se_opts
+                    else "Auto"
+                ),
+                help=_se_help,
+                key="se_override_select",
+            )
+
         if st.session_state.analysis_error:
             st.error(st.session_state.analysis_error)
 
@@ -391,6 +422,7 @@ if dep_var or indep_vars:
                     confirmed = st.session_state.confirmed_structure
                     det: DetectionResult = st.session_state.detection_result
 
+                    _override = st.session_state.robust_se_override
                     if confirmed == "panel" and det.entity_col and det.time_col:
                         pipeline = run_panel_pipeline(
                             df, dep_var, indep_vars,
@@ -398,12 +430,14 @@ if dep_var or indep_vars:
                             time_col=det.time_col,
                             ingest_result=result,
                             missing_strategy=st.session_state.missing_strategy,
+                            robust_se_override=_override,
                         )
                     else:
                         pipeline = run_cross_sectional_pipeline(
                             df, dep_var, indep_vars,
                             ingest_result=result,
                             missing_strategy=st.session_state.missing_strategy,
+                            robust_se_override=_override,
                         )
 
                     rdata = build_report_data_from_pipeline(
