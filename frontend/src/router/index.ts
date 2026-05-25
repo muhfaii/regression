@@ -1,0 +1,29 @@
+import { createRouter, createWebHistory } from 'vue-router'
+import { useDatasetStore } from '../stores/dataset'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', redirect: '/data' },
+    { path: '/data', component: () => import('../views/DataImportView.vue') },
+    { path: '/home', component: () => import('../views/HomeModeView.vue') },
+    { path: '/guide', component: () => import('../views/GuideMeView.vue') },
+    { path: '/browse', component: () => import('../views/BrowseTestsView.vue') },
+    { path: '/configure', component: () => import('../views/AnalysisConfigView.vue') },
+    { path: '/results', component: () => import('../views/ResultsView.vue') },
+  ],
+})
+
+// Guard: screens beyond /data require a loaded dataset
+const GUARDED = ['/home', '/guide', '/browse', '/configure', '/results']
+
+router.beforeEach((to) => {
+  if (GUARDED.includes(to.path)) {
+    const dataset = useDatasetStore()
+    if (!dataset.isLoaded) {
+      return { path: '/data', query: { message: 'no_data' } }
+    }
+  }
+})
+
+export default router

@@ -1,0 +1,253 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useResultsStore } from '../stores/results'
+import { useSessionStore } from '../stores/session'
+
+const router = useRouter()
+const results = useResultsStore()
+const session = useSessionStore()
+
+const result = computed(() => results.activeResult)
+const activeTab = ref<'plain' | 'apa' | 'technical'>(
+  session.mode === 'browse' ? 'technical' : 'plain'
+)
+
+const STATUS_ICON: Record<string, string> = { pass: '✓', amber: '⚠', fail: '✗' }
+const STATUS_CLASS: Record<string, string> = { pass: 'check-pass', amber: 'check-amber', fail: 'check-fail' }
+
+function formatStat(val: unknown): string {
+  if (typeof val === 'number') return val.toFixed(4)
+  if (typeof val === 'object' && val !== null) return JSON.stringify(val)
+  return String(val)
+}
+
+function newAnalysis() {
+  router.push(session.mode === 'guide' ? '/guide' : '/browse')
+}
+</script>
+
+<template>
+  <div class="results-view">
+    <!-- Left sidebar -->
+    <aside class="results-sidebar">
+      <button class="new-analysis-btn" @click="newAnalysis">+ New analysis</button>
+      <div class="history-label">Recent analyses</div>
+      <div
+        v-for="r in results.history"
+        :key="r.result_id"
+        class="history-item"
+        :class="{ active: r.result_id === results.activeResultId }"
+        @click="results.setActive(r.result_id)"
+      >
+        {{ r.test_name }}
+      </div>
+      <p class="signin-nudge">Sign in to save history across sessions.</p>
+    </aside>
+
+    <!-- Main results -->
+    <div v-if="result" class="results-main">
+      <h1 class="result-title">{{ result.test_name }}</h1>
+      <p class="result-meta">N = {{ result.n_obs }}</p>
+
+      <!-- Key stats cards -->
+      <div class="stats-cards">
+        <template v-for="(statVal, key) in result.statistics" :key="key">
+          <div v-if="typeof statVal === 'number' || typeof statVal === 'string'" class="stat-card">
+            <div class="stat-label">{{ String(key).replace(/_/g, ' ') }}</div>
+            <div class="stat-value">{{ formatStat(statVal) }}</div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Effect size -->
+      <div v-if="result.effect_size" class="effect-size-section">
+        <span class="effect-label">{{ result.effect_size.name }}:</span>
+        <strong>{{ result.effect_size.value.toFixed(3) }}</strong>
+        <span class="effect-interp">({{ result.effect_size.interpretation }})</span>
+      </div>
+
+      <!-- Assumption checks -->
+      <div v-if="result.assumption_checks.length" class="assumptions-section">
+        <h3 class="section-title">Assumption checks</h3>
+        <div
+          v-for="check in result.assumption_checks"
+          :key="check.name"
+          class="check-item"
+          :class="STATUS_CLASS[check.status]"
+        >
+          <span class="check-icon">{{ STATUS_ICON[check.status] }}</span>
+          <div class="check-content">
+            <div class="check-name">{{ check.name }}</div>
+            <div class="check-detail">{{ check.detail }}</div>
+            <div v-if="check.fix_suggestion" class="check-fix">{{ check.fix_suggestion }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interpretation tabs -->
+      <div class="interpretation-section">
+        <h3 class="section-title">Interpretation</h3>
+        <div class="tabs">
+          <button
+            v-for="tab in ([['plain', 'Plain English'], ['apa', 'APA 7'], ['technical', 'Technical']] as [string, string][])"
+            :key="tab[0]"
+            class="tab-btn"
+            :class="{ active: activeTab === tab[0] }"
+            @click="activeTab = tab[0] as 'plain' | 'apa' | 'technical'"
+          >
+            {{ tab[1] }}
+          </button>
+        </div>
+        <div class="tab-content">
+          <p v-if="activeTab === 'plain'">{{ result.interpretation.plain }}</p>
+          <p v-if="activeTab === 'apa'" class="apa-text">{{ result.interpretation.apa }}</p>
+          <p v-if="activeTab === 'technical'" class="mono-text">{{ result.interpretation.technical }}</p>
+        </div>
+      </div>
+
+      <!-- Warnings -->
+      <div v-if="result.warnings.length" class="warnings-section">
+        <p v-for="w in result.warnings" :key="w" class="warning-item">⚠ {{ w }}</p>
+      </div>
+    </div>
+
+    <div v-else class="no-result">No result selected.</div>
+  </div>
+</template>
+
+<style scoped>
+.results-view {
+  display: flex;
+  flex: 1;
+  height: calc(100vh - var(--topbar-h));
+  overflow: hidden;
+}
+.results-sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+.new-analysis-btn {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.history-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  padding: 4px 2px;
+}
+.history-item {
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--color-text);
+  transition: background 0.1s;
+}
+.history-item:hover { background: var(--color-surface); }
+.history-item.active { background: #ede9fe; color: var(--color-primary); font-weight: 600; }
+.signin-nudge {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border);
+  padding-top: 10px;
+  margin-top: auto;
+}
+.results-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 800px;
+}
+.result-title { font-size: 22px; }
+.result-meta { font-size: 13px; color: var(--color-text-muted); }
+.stats-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.stat-card {
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 14px 18px;
+  min-width: 120px;
+  background: var(--color-surface);
+}
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  margin-bottom: 4px;
+}
+.stat-value { font-size: 18px; font-weight: 700; }
+.effect-size-section { font-size: 14px; color: var(--color-text); }
+.effect-label { color: var(--color-text-muted); margin-right: 6px; }
+.effect-interp { color: var(--color-text-muted); font-size: 13px; margin-left: 4px; }
+.section-title { font-size: 15px; margin-bottom: 12px; }
+.assumptions-section { display: flex; flex-direction: column; gap: 8px; }
+.check-item {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid transparent;
+}
+.check-pass { background: var(--color-green-bg); border-color: #bbf7d0; }
+.check-amber { background: var(--color-amber-bg); border-color: #fde68a; }
+.check-fail { background: #fef2f2; border-color: #fecaca; }
+.check-icon { font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.check-pass .check-icon { color: var(--color-green); }
+.check-amber .check-icon { color: var(--color-amber); }
+.check-fail .check-icon { color: var(--color-red); }
+.check-name { font-weight: 600; }
+.check-detail { color: var(--color-text-muted); margin-top: 2px; }
+.check-fix { font-style: italic; margin-top: 4px; color: var(--color-text-muted); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--color-border); margin-bottom: 16px; }
+.tab-btn {
+  background: none;
+  border: none;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s;
+}
+.tab-btn.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+.tab-content { font-size: 14px; line-height: 1.6; color: var(--color-text); }
+.apa-text { font-style: italic; }
+.mono-text { font-family: ui-monospace, monospace; font-size: 13px; }
+.warnings-section { display: flex; flex-direction: column; gap: 6px; }
+.warning-item {
+  font-size: 12px;
+  color: var(--color-amber);
+  background: var(--color-amber-bg);
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.no-result { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--color-text-muted); }
+</style>
