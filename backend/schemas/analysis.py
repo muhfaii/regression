@@ -20,3 +20,4 @@ class ValidateConfigRequest(BaseModel):
     session_id: str
     test_key: str
     config: dict
+    column_overrides: dict[str, str] = {}

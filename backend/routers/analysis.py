@@ -3,24 +3,63 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from backend.analysis_modules.regression import run_ols
+from backend.analysis_modules import (
+    anova,
+    chi_square,
+    correlation,
+    descriptive,
+    logistic,
+    nonparametric,
+    regression,
+    t_tests,
+)
 from backend.schemas.analysis import RunRequest, ValidateConfigRequest
 from backend.schemas.results import AnalysisResult
 from backend.services import session_store
+from backend.services.column_inference import _classify_type
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
+
+
+# ---------------------------------------------------------------------------
+# Runner shims — each takes (df, config, options) → AnalysisResult
+# ---------------------------------------------------------------------------
 
 def _run_ols(df, config, options):
     dep_var = config.get("dep_var")
     indep_vars = config.get("indep_vars", [])
     if not dep_var or not indep_vars:
         raise ValueError("dep_var and at least one indep_var are required.")
-    return run_ols(df, dep_var, indep_vars)
+    return regression.run_ols(df, dep_var, indep_vars)
 
 
-# Registry of available test runners — extended in Phase B/C
 _RUNNERS = {
+    "descriptive": descriptive.run,
+    "independent_t": t_tests.run_independent_t,
+    "paired_t": t_tests.run_paired_t,
+    "one_way_anova": anova.run,
+    "mann_whitney": nonparametric.run_mann_whitney,
+    "wilcoxon": nonparametric.run_wilcoxon,
+    "kruskal_wallis": nonparametric.run_kruskal_wallis,
+    "correlation": correlation.run,
+    "chi_square": chi_square.run,
     "ols_regression": _run_ols,
+    "logistic_regression": logistic.run,
+}
+
+# Slot type requirements — mirrors TEST_CATALOG in frontend/src/constants/tests.ts
+_SLOT_TYPES: dict[str, dict[str, str]] = {
+    "descriptive": {"variables": "any"},
+    "independent_t": {"outcome": "continuous", "group": "categorical"},
+    "paired_t": {"col_a": "continuous", "col_b": "continuous"},
+    "one_way_anova": {"outcome": "continuous", "group": "categorical"},
+    "mann_whitney": {"outcome": "continuous", "group": "categorical"},
+    "wilcoxon": {"col_a": "continuous", "col_b": "continuous"},
+    "kruskal_wallis": {"outcome": "continuous", "group": "categorical"},
+    "correlation": {"col_a": "continuous", "col_b": "continuous"},
+    "chi_square": {"col_a": "categorical", "col_b": "categorical"},
+    "ols_regression": {"dep_var": "continuous", "indep_vars": "any"},
+    "logistic_regression": {"outcome": "categorical", "predictors": "any"},
 }
 
 
@@ -41,7 +80,6 @@ async def run_analysis(req: RunRequest) -> AnalysisResult:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}")
 
-    # Persist result in session for later retrieval / export
     session_store.save_result(req.session_id, result.result_id, result.__dict__)
 
     return AnalysisResult(
@@ -62,8 +100,35 @@ async def validate_config(req: ValidateConfigRequest) -> dict:
     session = session_store.get_session(req.session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
-    # Phase B: add type-conflict checks here
-    return {"conflicts": []}
+
+    slot_types = _SLOT_TYPES.get(req.test_key, {})
+    if not slot_types:
+        return {"conflicts": []}
+
+    # Build effective column type map (inferred, overridden by client overrides)
+    df = session.df
+    inferred: dict[str, str] = {col: _classify_type(df[col]) for col in df.columns}
+    effective: dict[str, str] = {**inferred, **req.column_overrides}
+
+    conflicts = []
+    for slot_key, required_type in slot_types.items():
+        if required_type == "any":
+            continue
+        value = req.config.get(slot_key)
+        if value is None:
+            continue
+        col_names = value if isinstance(value, list) else [value]
+        for col in col_names:
+            actual = effective.get(col)
+            if actual and actual != required_type:
+                conflicts.append({
+                    "slot": slot_key,
+                    "column": col,
+                    "required_type": required_type,
+                    "actual_type": actual,
+                })
+
+    return {"conflicts": conflicts}
 
 
 @router.get("/results/{result_id}")

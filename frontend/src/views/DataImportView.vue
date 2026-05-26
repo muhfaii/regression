@@ -2,6 +2,8 @@
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import FileDropZone from '../components/data-import/FileDropZone.vue'
+import PasteImport from '../components/data-import/PasteImport.vue'
+import SampleDataGrid from '../components/data-import/SampleDataGrid.vue'
 import ColumnPreviewTable from '../components/data-import/ColumnPreviewTable.vue'
 import { useApi } from '../composables/useApi'
 import { useDatasetStore } from '../stores/dataset'
@@ -15,51 +17,74 @@ const dataset = useDatasetStore()
 const session = useSessionStore()
 const api = useApi()
 
+type Tab = 'upload' | 'paste' | 'samples'
+const activeTab = ref<Tab>('upload')
+
 const loading = ref(false)
 const error = ref<string | null>(null)
 const preview = ref<DatasetPreview | null>(null)
 const showReimportDialog = ref(false)
-const pendingFile = ref<File | null>(null)
+const pendingImport = ref<(() => Promise<void>) | null>(null)
 
 const noDataMessage = computed(() =>
   route.query.message === 'no_data' ? 'Load a dataset to get started.' : null
 )
 
-async function handleFile(file: File) {
+async function applyPreview(data: DatasetPreview) {
+  preview.value = data
+  dataset.load(data)
+  session.initSession(data.session_id)
+}
+
+async function guardImport(doImport: () => Promise<void>) {
   if (dataset.isLoaded) {
-    pendingFile.value = file
+    pendingImport.value = doImport
     showReimportDialog.value = true
     return
   }
-  await doImport(file)
+  await doImport()
+}
+
+async function handleFile(file: File) {
+  await guardImport(async () => {
+    loading.value = true
+    error.value = null
+    try {
+      const data: DatasetPreview = await api.uploadFile(file)
+      await applyPreview(data)
+    } catch (e: any) {
+      error.value = e.message ?? 'Upload failed.'
+    } finally {
+      loading.value = false
+    }
+  })
+}
+
+async function handlePasted(data: unknown) {
+  await guardImport(async () => {
+    await applyPreview(data as DatasetPreview)
+  })
+}
+
+async function handleSample(data: unknown) {
+  await guardImport(async () => {
+    await applyPreview(data as DatasetPreview)
+  })
 }
 
 async function confirmReimport() {
   showReimportDialog.value = false
   dataset.clearDataset()
   session.clearSession()
-  if (pendingFile.value) await doImport(pendingFile.value)
-  pendingFile.value = null
+  if (pendingImport.value) {
+    await pendingImport.value()
+  }
+  pendingImport.value = null
 }
 
 function cancelReimport() {
   showReimportDialog.value = false
-  pendingFile.value = null
-}
-
-async function doImport(file: File) {
-  loading.value = true
-  error.value = null
-  try {
-    const data: DatasetPreview = await api.uploadFile(file)
-    preview.value = data
-    dataset.load(data)
-    session.initSession(data.session_id)
-  } catch (e: any) {
-    error.value = e.message ?? 'Upload failed.'
-  } finally {
-    loading.value = false
-  }
+  pendingImport.value = null
 }
 
 function handleTypeChange(colName: string, type: ColumnType) {
@@ -73,20 +98,44 @@ function handleTypeChange(colName: string, type: ColumnType) {
 function proceed() {
   router.push('/home')
 }
+
+function reset() {
+  preview.value = null
+  error.value = null
+}
 </script>
 
 <template>
   <div class="import-view">
     <div class="import-card">
       <h1 class="import-title">Import your data</h1>
-      <p class="import-sub">Upload a file to begin your analysis session.</p>
+      <p class="import-sub">Upload a file, paste text, or choose a sample dataset.</p>
 
       <div v-if="noDataMessage" class="info-banner" role="alert">
         {{ noDataMessage }}
       </div>
 
       <div v-if="!preview">
-        <FileDropZone @file="handleFile" />
+        <!-- Tab bar -->
+        <div class="tabs" role="tablist">
+          <button
+            v-for="t in (['upload', 'paste', 'samples'] as Tab[])"
+            :key="t"
+            class="tab"
+            :class="{ active: activeTab === t }"
+            role="tab"
+            :aria-selected="activeTab === t"
+            @click="activeTab = t"
+          >
+            {{ t === 'upload' ? 'Upload file' : t === 'paste' ? 'Paste data' : 'Sample data' }}
+          </button>
+        </div>
+
+        <div class="tab-panel">
+          <FileDropZone v-if="activeTab === 'upload'" @file="handleFile" />
+          <PasteImport v-else-if="activeTab === 'paste'" @imported="handlePasted" />
+          <SampleDataGrid v-else @imported="handleSample" />
+        </div>
 
         <div v-if="loading" class="status-msg">Parsing file…</div>
         <div v-if="error" class="error-msg" role="alert">{{ error }}</div>
@@ -105,7 +154,7 @@ function proceed() {
         <ColumnPreviewTable :columns="preview.columns" @type-change="handleTypeChange" />
 
         <div class="preview-actions">
-          <button class="btn-ghost" @click="preview = null; error = null">Upload a different file</button>
+          <button class="btn-ghost" @click="reset">Import different data</button>
           <button class="btn-primary" @click="proceed">Continue to analysis →</button>
         </div>
       </div>
@@ -134,14 +183,8 @@ function proceed() {
   width: 100%;
   max-width: 640px;
 }
-.import-title {
-  font-size: 24px;
-  margin-bottom: 6px;
-}
-.import-sub {
-  color: var(--color-text-muted);
-  margin-bottom: 24px;
-}
+.import-title { font-size: 24px; margin-bottom: 6px; }
+.import-sub { color: var(--color-text-muted); margin-bottom: 24px; }
 .info-banner {
   background: #eff6ff;
   border: 1px solid #bfdbfe;
@@ -151,11 +194,32 @@ function proceed() {
   font-size: 13px;
   margin-bottom: 20px;
 }
-.status-msg {
-  text-align: center;
-  color: var(--color-text-muted);
-  margin-top: 16px;
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 20px;
 }
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tab:hover { color: var(--color-text); }
+.tab.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 600;
+}
+.tab-panel { min-height: 160px; }
+.status-msg { text-align: center; color: var(--color-text-muted); margin-top: 16px; }
 .error-msg {
   background: #fef2f2;
   border: 1px solid #fecaca;
@@ -166,12 +230,7 @@ function proceed() {
   margin-top: 16px;
 }
 .preview-section { display: flex; flex-direction: column; gap: 16px; }
-.preview-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  font-size: 14px;
-}
+.preview-meta { display: flex; align-items: baseline; gap: 12px; font-size: 14px; }
 .meta-detail { color: var(--color-text-muted); font-size: 13px; }
 .warnings { display: flex; flex-direction: column; gap: 4px; }
 .warning-item {
