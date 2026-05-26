@@ -49,5 +49,12 @@ export function useApi() {
     return request('/analysis/run', { method: 'POST', body: JSON.stringify(payload) })
   }
 
-  return { uploadFile, listSamples, loadSample, pasteData, runAnalysis }
+  async function validateConfig(payload: object) {
+    return request<{ conflicts: { slot: string; column: string; required_type: string; actual_type: string }[] }>(
+      '/analysis/validate-config',
+      { method: 'POST', body: JSON.stringify(payload) },
+    )
+  }
+
+  return { uploadFile, listSamples, loadSample, pasteData, runAnalysis, validateConfig }
 }
