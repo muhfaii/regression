@@ -9,7 +9,8 @@ const router = useRouter()
 const analysis = useAnalysisStore()
 
 const answers = ref<(string | null)[]>([null, null, null, null])
-const step = ref(0) // 0-indexed
+const step = ref(0)
+const direction = ref<'forward' | 'back'>('forward')
 const showRecommendation = ref(false)
 const recommendation = ref<{ test_key: string; reason: string } | null>(null)
 
@@ -18,9 +19,9 @@ const totalSteps = WIZARD_QUESTIONS.length
 
 function answer(value: string | null) {
   answers.value[step.value] = value
+  direction.value = 'forward'
 
   if (step.value < totalSteps - 1) {
-    // Skip Q2 (group count) if not comparing
     if (step.value === 0 && value !== 'compare') {
       answers.value[1] = null
       step.value = 2
@@ -37,8 +38,8 @@ function answer(value: string | null) {
 
 function back() {
   if (step.value > 0) {
+    direction.value = 'back'
     showRecommendation.value = false
-    // Reverse the Q2 skip
     if (step.value === 2 && answers.value[0] !== 'compare') {
       step.value = 0
     } else {
@@ -68,7 +69,7 @@ const recommendedTest = computed(() =>
 <template>
   <div class="guide-view">
     <!-- Recommendation screen -->
-    <div v-if="showRecommendation && recommendation && recommendedTest" class="recommendation-card">
+    <div v-if="showRecommendation && recommendation && recommendedTest" class="recommendation-card" role="status" aria-live="polite">
       <div class="rec-tag">Recommended test</div>
       <h2 class="rec-test-name">{{ recommendedTest.name }}</h2>
       <p class="rec-reason">{{ recommendation.reason }}</p>
@@ -87,7 +88,7 @@ const recommendedTest = computed(() =>
     <!-- Wizard steps -->
     <div v-else class="wizard">
       <!-- Progress dots -->
-      <div class="progress-dots" aria-label="Step {{ step + 1 }} of {{ totalSteps }}">
+      <div class="progress-dots" :aria-label="`Step ${step + 1} of ${totalSteps}`">
         <span
           v-for="i in totalSteps"
           :key="i"
@@ -96,22 +97,24 @@ const recommendedTest = computed(() =>
         />
       </div>
 
-      <div class="wizard-card">
-        <p class="step-label">Step {{ step + 1 }} of {{ totalSteps }}</p>
-        <h2 class="wizard-question">{{ currentQuestion.question }}</h2>
+      <Transition :name="direction === 'forward' ? 'slide-fwd' : 'slide-back'" mode="out-in">
+        <div class="wizard-card" :key="step">
+          <p class="step-label">Step {{ step + 1 }} of {{ totalSteps }}</p>
+          <h2 class="wizard-question">{{ currentQuestion.question }}</h2>
 
-        <div class="wizard-options">
-          <button
-            v-for="opt in currentQuestion.options"
-            :key="String(opt.value)"
-            class="wizard-option"
-            @click="answer(opt.value)"
-          >
-            <div class="opt-label">{{ opt.label }}</div>
-            <div v-if="'hint' in opt && opt.hint" class="opt-hint">{{ opt.hint }}</div>
-          </button>
+          <div class="wizard-options">
+            <button
+              v-for="opt in currentQuestion.options"
+              :key="String(opt.value)"
+              class="wizard-option"
+              @click="answer(opt.value)"
+            >
+              <div class="opt-label">{{ opt.label }}</div>
+              <div v-if="'hint' in opt && opt.hint" class="opt-hint">{{ opt.hint }}</div>
+            </button>
+          </div>
         </div>
-      </div>
+      </Transition>
 
       <button v-if="step > 0" class="back-btn" @click="back">← Back</button>
     </div>
@@ -145,6 +148,15 @@ const recommendedTest = computed(() =>
 }
 .dot.active { background: var(--color-primary); }
 .dot.done { background: var(--color-primary); opacity: 0.4; }
+.slide-fwd-enter-active,
+.slide-fwd-leave-active,
+.slide-back-enter-active,
+.slide-back-leave-active { transition: transform 0.2s ease, opacity 0.15s ease; }
+.slide-fwd-enter-from { transform: translateX(24px); opacity: 0; }
+.slide-fwd-leave-to   { transform: translateX(-24px); opacity: 0; }
+.slide-back-enter-from { transform: translateX(-24px); opacity: 0; }
+.slide-back-leave-to   { transform: translateX(24px); opacity: 0; }
+
 .wizard-card {
   border: 1px solid var(--color-border);
   border-radius: 16px;

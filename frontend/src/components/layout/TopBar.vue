@@ -98,4 +98,22 @@ function isActive(path: string) {
 .topbar-right {
   margin-left: auto;
 }
+
+@media (max-width: 768px) {
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .topbar-nav {
+    flex: 0 0 100%;
+    order: 3;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .topbar-nav::-webkit-scrollbar { display: none; }
+  .topbar-right { margin-left: 0; }
+}
 </style>

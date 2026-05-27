@@ -87,7 +87,7 @@ function newAnalysis() {
     </aside>
 
     <!-- Main results -->
-    <div v-if="result" class="results-main">
+    <div v-if="result" class="results-main" aria-live="polite" aria-atomic="false">
       <h1 class="result-title">{{ result.test_name }}</h1>
       <p class="result-meta">N = {{ result.n_obs }}</p>
 
@@ -202,12 +202,14 @@ function newAnalysis() {
       <!-- Interpretation tabs -->
       <div class="interpretation-section">
         <h3 class="section-title">Interpretation</h3>
-        <div class="tabs">
+        <div class="tabs" role="tablist">
           <button
             v-for="[key, label] in ([['plain', 'Plain English'], ['apa', 'APA 7'], ['technical', 'Technical']] as [string, string][])"
             :key="key"
             class="tab-btn"
             :class="{ active: activeTab === key }"
+            role="tab"
+            :aria-selected="activeTab === key"
             @click="activeTab = key as 'plain' | 'apa' | 'technical'"
           >
             {{ label }}
@@ -228,7 +230,10 @@ function newAnalysis() {
       <ExportPanel />
     </div>
 
-    <div v-else class="no-result">No result selected.</div>
+    <div v-else class="no-result">
+      <p class="no-result-primary">No result selected</p>
+      <p class="no-result-secondary">Pick an analysis from the sidebar to view it here.</p>
+    </div>
   </div>
 </template>
 
@@ -311,5 +316,16 @@ function newAnalysis() {
 .warnings-section { display: flex; flex-direction: column; gap: 6px; }
 .warning-item { font-size: 12px; color: var(--color-amber); background: var(--color-amber-bg); padding: 6px 10px; border-radius: 6px; }
 
-.no-result { display: flex; align-items: center; justify-content: center; flex: 1; color: var(--color-text-muted); }
+.no-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  text-align: center;
+  padding: 48px 32px;
+}
+.no-result-primary { font-size: 16px; font-weight: 600; color: var(--color-text); margin: 0; }
+.no-result-secondary { font-size: 13px; color: var(--color-text-muted); margin: 0; }
 </style>

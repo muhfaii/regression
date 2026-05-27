@@ -53,7 +53,9 @@ function select(key: string) {
     <!-- Main content area -->
     <div class="browse-main">
       <div v-if="!analysis.selectedTestKey" class="empty-state">
-        <p>Select a test from the sidebar to configure and run it.</p>
+        <div class="empty-icon">⬡</div>
+        <p class="empty-primary">Choose a statistical test</p>
+        <p class="empty-secondary">Select a test from the sidebar to configure variables and run the analysis.</p>
       </div>
       <RouterView v-else />
     </div>
@@ -168,10 +170,17 @@ function select(key: string) {
 }
 .empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--color-text-muted);
-  font-size: 14px;
+  gap: 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: 16px;
+  padding: 48px 32px;
+  text-align: center;
 }
+.empty-icon { font-size: 36px; color: var(--color-border); line-height: 1; }
+.empty-primary { font-size: 16px; font-weight: 600; color: var(--color-text); margin: 0; }
+.empty-secondary { font-size: 13px; color: var(--color-text-muted); margin: 0; max-width: 280px; line-height: 1.5; }
 </style>

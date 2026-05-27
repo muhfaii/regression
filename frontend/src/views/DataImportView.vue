@@ -111,7 +111,7 @@ function reset() {
       <h1 class="import-title">Import your data</h1>
       <p class="import-sub">Upload a file, paste text, or choose a sample dataset.</p>
 
-      <div v-if="noDataMessage" class="info-banner" role="alert">
+      <div v-if="noDataMessage" class="info-banner" role="status" aria-live="polite">
         {{ noDataMessage }}
       </div>
 
