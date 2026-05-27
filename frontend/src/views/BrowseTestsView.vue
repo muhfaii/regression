@@ -38,7 +38,7 @@ function select(key: string) {
               active: analysis.selectedTestKey === test.key,
               'coming-soon': test.coming_soon,
             }"
-            :data-tooltip="test.tooltip"
+            :data-tooltip="test.coming_soon ? 'This test is coming soon. Add your email to be notified.' : test.tooltip"
             :disabled="test.coming_soon"
             @click="select(test.key)"
           >
@@ -121,6 +121,37 @@ function select(key: string) {
 .sidebar-item.coming-soon { opacity: 0.5; cursor: default; }
 .item-name { flex: 1; }
 .item-desc { font-size: 11px; color: var(--color-text-muted); white-space: nowrap; }
+/* Hover tooltip for all sidebar items */
+.sidebar-item[data-tooltip]:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #1e1e2e;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  padding: 7px 11px;
+  border-radius: 7px;
+  max-width: 220px;
+  white-space: normal;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+}
+.sidebar-item[data-tooltip]:hover::before {
+  content: '';
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: #1e1e2e;
+  z-index: 200;
+  pointer-events: none;
+}
 .badge-soon {
   font-size: 10px;
   font-weight: 700;

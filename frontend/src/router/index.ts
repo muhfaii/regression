@@ -11,6 +11,7 @@ const router = createRouter({
     { path: '/browse', component: () => import('../views/BrowseTestsView.vue') },
     { path: '/configure', component: () => import('../views/AnalysisConfigView.vue') },
     { path: '/results', component: () => import('../views/ResultsView.vue') },
+    { path: '/share/:token', component: () => import('../views/ShareView.vue') },
   ],
 })
 

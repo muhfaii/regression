@@ -56,5 +56,32 @@ export function useApi() {
     )
   }
 
-  return { uploadFile, listSamples, loadSample, pasteData, runAnalysis, validateConfig }
+  async function exportWord(resultId: string, sessionId: string): Promise<Blob> {
+    const res = await fetch(
+      `${BASE}/export/word/${resultId}?session_id=${encodeURIComponent(sessionId)}`,
+      { method: 'POST' },
+    )
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.detail ?? 'Export failed')
+    }
+    return res.blob()
+  }
+
+  async function createShareLink(resultId: string, sessionId: string) {
+    return request<{ token: string; url: string }>(
+      `/export/share/${resultId}?session_id=${encodeURIComponent(sessionId)}`,
+      { method: 'POST' },
+    )
+  }
+
+  async function getSharedResult(token: string) {
+    return request<Record<string, unknown>>(`/share/${token}`)
+  }
+
+  return {
+    uploadFile, listSamples, loadSample, pasteData,
+    runAnalysis, validateConfig,
+    exportWord, createShareLink, getSharedResult,
+  }
 }
