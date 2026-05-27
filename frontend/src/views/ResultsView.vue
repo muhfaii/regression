@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useResultsStore } from '../stores/results'
 import { useSessionStore } from '../stores/session'
+import ExportPanel from '../components/results/ExportPanel.vue'
 
 const router = useRouter()
 const results = useResultsStore()
@@ -223,6 +224,8 @@ function newAnalysis() {
       <div v-if="result.warnings.length" class="warnings-section">
         <p v-for="w in result.warnings" :key="w" class="warning-item">⚠ {{ w }}</p>
       </div>
+
+      <ExportPanel />
     </div>
 
     <div v-else class="no-result">No result selected.</div>

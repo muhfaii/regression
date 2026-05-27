@@ -48,6 +48,18 @@ def get_result(session_id: str, result_id: str) -> dict | None:
         return session.results.get(result_id)
 
 
+# Share token store — no TTL (tokens are UUID-keyed result snapshots)
+_share_store: dict[str, dict] = {}
+
+
+def save_share(token: str, result: dict) -> None:
+    _share_store[token] = result
+
+
+def get_share(token: str) -> dict | None:
+    return _share_store.get(token)
+
+
 async def cleanup_loop() -> None:
     while True:
         await asyncio.sleep(60)
