@@ -165,9 +165,10 @@ async function runAnalysis() {
     <button
       class="run-btn"
       :disabled="!canRun || analysis.isRunning"
+      :aria-busy="analysis.isRunning"
       @click="runAnalysis"
     >
-      <span v-if="analysis.isRunning">Running…</span>
+      <span v-if="analysis.isRunning" role="status" aria-live="polite">Running…</span>
       <span v-else>Run analysis</span>
     </button>
 
