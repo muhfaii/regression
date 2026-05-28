@@ -30,5 +30,6 @@ export interface RunRequest {
     effect_size: boolean
     post_hoc: boolean
     se_type: string
+    p_adjust: string
   }
 }

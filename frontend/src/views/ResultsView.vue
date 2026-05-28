@@ -26,7 +26,7 @@ const STATUS_ICON: Record<string, string> = { pass: '✓', amber: '⚠', fail: '
 const STATUS_CLASS: Record<string, string> = { pass: 'check-pass', amber: 'check-amber', fail: 'check-fail' }
 
 // Top-level scalar keys rendered as headline cards (skip structural sub-objects)
-const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type'])
+const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type'])
 
 function scalarCards(stats: Record<string, unknown>) {
   return Object.entries(stats).filter(([k, v]) =>
@@ -222,6 +222,9 @@ function newAnalysis() {
       <!-- Correlation matrix -->
       <div v-if="corrMatrix" class="section">
         <h3 class="section-title">Correlation matrix</h3>
+        <div v-if="result.statistics.p_adjust_method" class="adjustment-badge">
+          P-values adjusted using <strong>{{ fmtLabel(result.statistics.p_adjust_method as string) }}</strong>
+        </div>
         <div class="tabs">
           <button
             v-for="ct in (['pearson', 'spearman', 'kendall'] as const)"
@@ -470,6 +473,7 @@ function newAnalysis() {
 /* Section blocks */
 .section { display: flex; flex-direction: column; gap: 12px; }
 .section-title { font-size: 15px; font-weight: 600; margin: 0; }
+.adjustment-badge { font-size: 12px; color: var(--color-text-muted); background: var(--color-surface); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--color-border); }
 
 /* Descriptive per-variable */
 .var-block { display: flex; flex-direction: column; gap: 8px; }

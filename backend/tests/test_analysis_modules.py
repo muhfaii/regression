@@ -9,8 +9,10 @@ from backend.analysis_modules import (
     correlation,
     descriptive,
     logistic,
+    multicomp,
     nonparametric,
     panel,
+    regression,
     t_tests,
 )
 from backend.schemas.analysis import AnalysisOptions
@@ -323,6 +325,93 @@ def test_logistic_non_binary(continuous_df):
 def test_logistic_missing_config(categorical_df):
     with pytest.raises(ValueError, match="required"):
         logistic.run(categorical_df, {"outcome": "outcome"}, OPTS)
+
+
+# ---------------------------------------------------------------------------
+# Multiple comparison corrections
+# ---------------------------------------------------------------------------
+
+def test_multicomp_basic():
+    p = [0.001, 0.012, 0.038, 0.21, 0.50]
+    adj = multicomp.adjust_pvalues(p, "bonferroni")
+    assert len(adj) == 5
+    assert adj[0] <= 0.01  # 0.001 * 5 = 0.005
+    assert all(a >= p[i] for i, a in enumerate(adj))  # adjusted >= raw
+
+
+def test_multicomp_fdr_bh():
+    p = [0.001, 0.012, 0.038, 0.21, 0.50]
+    adj = multicomp.adjust_pvalues(p, "fdr_bh")
+    assert len(adj) == 5
+    assert all(a >= p[i] for i, a in enumerate(adj))
+
+
+def test_multicomp_empty():
+    adj = multicomp.adjust_pvalues([], "bonferroni")
+    assert len(adj) == 0
+
+
+def test_multicomp_invalid_method():
+    with pytest.raises(ValueError, match="Unknown correction method"):
+        multicomp.adjust_pvalues([0.05], "invalid")
+
+
+# ---------------------------------------------------------------------------
+# Correlation with p-value adjustment
+# ---------------------------------------------------------------------------
+
+def test_correlation_p_adjust(continuous_df):
+    class _AdjOpts:
+        assumption_checks = True
+        effect_size = True
+        post_hoc = False
+        p_adjust = "fdr_bh"
+    result = correlation.run(continuous_df, {"variables": ["score", "pre", "post"]}, _AdjOpts())
+    assert "p_adjust_method" in result.statistics
+    assert result.statistics["p_adjust_method"] == "fdr_bh"
+    assert "matrix_p_pearson_adj" in result.statistics
+    assert "matrix_p_spearman_adj" in result.statistics
+    assert "matrix_p_kendall_adj" in result.statistics
+    # Adjusted p-values should be >= raw p-values
+    raw = result.statistics["matrix_p_pearson"]
+    adj = result.statistics["matrix_p_pearson_adj"]
+    for i in range(len(raw)):
+        for j in range(len(raw)):
+            assert adj[i][j] >= raw[i][j] - 1e-10  # floating point tolerance
+
+
+# ---------------------------------------------------------------------------
+# Regression with p-value adjustment
+# ---------------------------------------------------------------------------
+
+def test_regression_p_adjust(continuous_df):
+    class _AdjOpts:
+        assumption_checks = True
+        effect_size = True
+        post_hoc = False
+        se_type = "auto"
+        p_adjust = "bonferroni"
+    result = regression.run_ols(continuous_df, "score", ["pre", "post"], options=_AdjOpts())
+    assert "p_adjust_method" in result.statistics
+    assert result.statistics["p_adjust_method"] == "bonferroni"
+    coefs = result.statistics["coefficients"]
+    for var, c in coefs.items():
+        assert "p_adjusted" in c
+        assert c["p_adjusted"] >= c["p"] - 1e-10
+
+
+def test_regression_no_p_adjust(continuous_df):
+    class _NoAdjOpts:
+        assumption_checks = True
+        effect_size = True
+        post_hoc = False
+        se_type = "auto"
+        p_adjust = "none"
+    result = regression.run_ols(continuous_df, "score", ["pre", "post"], options=_NoAdjOpts())
+    assert "p_adjust_method" not in result.statistics
+    coefs = result.statistics["coefficients"]
+    for var, c in coefs.items():
+        assert "p_adjusted" not in c
 
 
 # ---------------------------------------------------------------------------

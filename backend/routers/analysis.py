@@ -31,7 +31,7 @@ def _run_ols(df, config, options):
     indep_vars = config.get("indep_vars", [])
     if not dep_var or not indep_vars:
         raise ValueError("dep_var and at least one indep_var are required.")
-    return regression.run_ols(df, dep_var, indep_vars)
+    return regression.run_ols(df, dep_var, indep_vars, options=options)
 
 
 _RUNNERS = {

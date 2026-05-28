@@ -167,6 +167,17 @@ async function runAnalysis() {
           <option value="CR2">CR2</option>
         </select>
       </div>
+      <div v-if="['correlation', 'ols_regression', 'panel_regression'].includes(test.key)" class="option-select">
+        <label class="option-select-label">P-value adjustment</label>
+        <select v-model="analysis.options.p_adjust" class="option-select-input">
+          <option value="none">None</option>
+          <option value="fdr_bh">FDR (Benjamini-Hochberg)</option>
+          <option value="bonferroni">Bonferroni</option>
+          <option value="holm">Holm</option>
+          <option value="fdr_by">FDR (Benjamini-Yekutieli)</option>
+          <option value="sidak">Šidák</option>
+        </select>
+      </div>
     </div>
 
     <div v-if="error" class="error-msg" role="alert">{{ error }}</div>

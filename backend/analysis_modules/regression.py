@@ -11,6 +11,7 @@ from regassist.ingest import IngestResult, ColumnInfo as IngestColumnInfo
 from regassist.pipeline import run_cross_sectional_pipeline
 
 from .base import AnalysisResult, AssumptionCheck, EffectSize, Interpretation
+from .multicomp import adjust_pvalues
 
 _VERDICT_MAP = {"pass": "pass", "borderline": "amber", "fail": "fail"}
 
@@ -20,6 +21,7 @@ def run_ols(
     dep_var: str,
     indep_vars: list[str],
     robust_se_override: str | None = None,
+    options=None,
 ) -> AnalysisResult:
     # Build a minimal IngestResult so the pipeline doesn't crash
     ingest = IngestResult(
@@ -63,6 +65,18 @@ def run_ols(
         "intercept": round(float(model.params.get("const", float("nan"))), 4),
         "se_type": model.se_variant or "classical",
     }
+
+    p_adjust_method = getattr(options, "p_adjust", "none") if options else "none"
+    if p_adjust_method and p_adjust_method != "none":
+        p_values = [coef_table[var]["p"] for var in indep_vars if var in coef_table]
+        if p_values:
+            p_adj = adjust_pvalues(p_values, p_adjust_method)
+            idx = 0
+            for var in indep_vars:
+                if var in coef_table:
+                    coef_table[var]["p_adjusted"] = round(float(p_adj[idx]), 4)
+                    idx += 1
+        stats["p_adjust_method"] = p_adjust_method
 
     # --- assumption checks ---
     checks = [_map_diagnostic(d) for d in diags if d.error is None]

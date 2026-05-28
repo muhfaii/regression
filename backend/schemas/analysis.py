@@ -8,6 +8,7 @@ class AnalysisOptions(BaseModel):
     effect_size: bool = True
     post_hoc: bool = False
     se_type: str = "auto"
+    p_adjust: str = "none"
 
 
 class RunRequest(BaseModel):

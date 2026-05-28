@@ -6,6 +6,19 @@ import pandas as pd
 from scipy import stats
 
 from .base import AnalysisResult, AssumptionCheck, EffectSize, Interpretation, r_interpretation
+from .multicomp import adjust_pvalues
+
+
+def _adjust_p_matrix(p_matrix: np.ndarray, method: str) -> list[list[float]]:
+    n = p_matrix.shape[0]
+    tri = np.triu_indices(n, k=1)
+    p_flat = p_matrix[tri]
+    p_adj_flat = adjust_pvalues(p_flat, method)
+    mat = np.zeros((n, n))
+    mat[tri] = p_adj_flat
+    mat = mat + mat.T
+    np.fill_diagonal(mat, 1.0)
+    return [[round(float(v), 4) for v in row] for row in mat]
 
 
 def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
@@ -53,6 +66,13 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         "matrix_p_spearman": mat_sp.tolist(),
         "matrix_p_kendall": mat_kp.tolist(),
     }
+
+    p_adjust_method = getattr(options, "p_adjust", "none")
+    if p_adjust_method and p_adjust_method != "none":
+        statistics["p_adjust_method"] = p_adjust_method
+        statistics["matrix_p_pearson_adj"] = _adjust_p_matrix(mat_pp, p_adjust_method)
+        statistics["matrix_p_spearman_adj"] = _adjust_p_matrix(mat_sp, p_adjust_method)
+        statistics["matrix_p_kendall_adj"] = _adjust_p_matrix(mat_kp, p_adjust_method)
 
     checks: list[AssumptionCheck] = []
     if options.assumption_checks and n <= 50:
