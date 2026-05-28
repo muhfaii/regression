@@ -8,3 +8,7 @@ htmlcov/
 build/
 dist/
 .DS_Store
+
+# Build artifacts
+frontend/src/**/*.js
+.claude/

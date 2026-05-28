@@ -1,4 +1,4 @@
-"""One-way ANOVA with optional Tukey post-hoc."""
+"""One-way ANOVA and factorial ANOVA with Tukey/Bonferroni post-hoc."""
 from __future__ import annotations
 
 import numpy as np
@@ -8,6 +8,10 @@ from statsmodels.stats.multicomp import pairwise_tukeyhsd
 
 from .base import AnalysisResult, AssumptionCheck, EffectSize, Interpretation
 
+
+# ---------------------------------------------------------------------------
+# One-way ANOVA
+# ---------------------------------------------------------------------------
 
 def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
     outcome = config.get("outcome")
@@ -41,11 +45,19 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         for g, gd in zip(groups, group_arrays)
     }
 
-    post_hoc = None
+    statistics = {
+        "f_statistic": round(float(f_stat), 4),
+        "p_value": round(float(p_val), 4),
+        "df_between": df_between,
+        "df_within": df_within,
+        "n": n_total,
+        "groups": group_stats,
+    }
+
     if options.post_hoc and p_val < 0.05:
         tukey = pairwise_tukeyhsd(valid[outcome].values, valid[group].values)
         rows = tukey.summary().data[1:]
-        post_hoc = [
+        statistics["post_hoc"] = [
             {
                 "group1": str(r[0]),
                 "group2": str(r[1]),
@@ -57,16 +69,7 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
             }
             for r in rows
         ]
-
-    statistics = {
-        "f_statistic": round(float(f_stat), 4),
-        "p_value": round(float(p_val), 4),
-        "df_between": df_between,
-        "df_within": df_within,
-        "n": n_total,
-        "groups": group_stats,
-        "post_hoc": post_hoc,
-    }
+        statistics["post_hoc_bonferroni"] = _bonferroni_posthoc(valid, outcome, group, groups)
 
     checks: list[AssumptionCheck] = []
     if options.assumption_checks:
@@ -120,6 +123,176 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         interpretation=Interpretation(plain=plain, apa=apa, technical=technical),
         effect_size=effect,
     )
+
+
+# ---------------------------------------------------------------------------
+# Factorial ANOVA
+# ---------------------------------------------------------------------------
+
+def run_factorial(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
+    outcome = config.get("outcome")
+    factors: list[str] = config.get("factors", [])
+    if not outcome or len(factors) < 2:
+        raise ValueError("outcome and at least two factors are required for factorial ANOVA.")
+
+    formula = f"{_safe_col(outcome)} ~ {' * '.join(_safe_col(f) for f in factors)}"
+
+    import statsmodels.api as sm
+    from statsmodels.formula.api import ols
+
+    valid = df[[outcome] + factors].dropna()
+    n_total = len(valid)
+    model = ols(formula, data=valid).fit()
+    anova_table = sm.stats.anova_lm(model, typ=2)
+
+    terms = []
+    for term in anova_table.index:
+        if term == "Residual":
+            continue
+        f_val = float(anova_table.loc[term, "F"])
+        p_val_term = float(anova_table.loc[term, "PR(>F)"])
+        df_effect = int(anova_table.loc[term, "df"])
+        ss_effect = float(anova_table.loc[term, "sum_sq"])
+        ss_total = float(anova_table["sum_sq"].sum())
+        eta_sq = ss_effect / ss_total if ss_total > 0 else 0.0
+
+        terms.append({
+            "term": term,
+            "f_statistic": round(f_val, 4),
+            "p_value": round(p_val_term, 4),
+            "df": df_effect,
+            "eta_sq": round(eta_sq, 4),
+        })
+
+    # Per-factor group summaries
+    group_stats: dict[str, dict] = {}
+    for f in factors:
+        grouped = valid.groupby(f)[outcome]
+        group_stats[f] = {
+            str(g): {
+                "n": int(v.count()),
+                "mean": round(float(v.mean()), 4),
+                "sd": round(float(v.std()), 4),
+            }
+            for g, v in grouped
+        }
+
+    # Post-hoc per factor with >2 levels
+    post_hoc_map: dict[str, list] = {}
+    if options.post_hoc:
+        for f in factors:
+            unique_vals = valid[f].unique()
+            if len(unique_vals) >= 3:
+                ph = _bonferroni_posthoc(valid, outcome, f, unique_vals)
+                if ph:
+                    post_hoc_map[f] = ph
+
+    # Residuals for assumption checks
+    checks: list[AssumptionCheck] = []
+    if options.assumption_checks:
+        residuals = model.resid
+        if n_total <= 100:
+            sw_s, sw_p = stats.shapiro(residuals)
+            checks.append(AssumptionCheck(
+                name="Normality of residuals (Shapiro-Wilk)",
+                status="pass" if sw_p > 0.05 else "amber",
+                detail=f"W = {sw_s:.3f}, p = {sw_p:.3f}",
+                fix_suggestion="Consider non-parametric alternatives if violated." if sw_p <= 0.05 else None,
+            ))
+        # Homogeneity of variance per factor
+        for f in factors:
+            groups_list = [valid[valid[f] == g][outcome].astype(float) for g in valid[f].unique()]
+            if len(groups_list) >= 2:
+                try:
+                    lev_s, lev_p = stats.levene(*groups_list)
+                    checks.append(AssumptionCheck(
+                        name=f"Homogeneity of variances — {f} (Levene's)",
+                        status="pass" if lev_p > 0.05 else "amber",
+                        detail=f"F = {lev_s:.3f}, p = {lev_p:.3f}",
+                        fix_suggestion="Consider data transformation or robust methods." if lev_p <= 0.05 else None,
+                    ))
+                except Exception:
+                    pass
+
+    r_squared = round(float(model.rsquared), 4)
+
+    statistics = {
+        "terms": terms,
+        "n": n_total,
+        "r_squared": r_squared,
+        "groups": group_stats,
+    }
+    if post_hoc_map:
+        statistics["post_hoc_bonferroni"] = post_hoc_map
+
+    effect = None
+    if options.effect_size:
+        main_eta = max((t["eta_sq"] for t in terms), default=0.0)
+        effect = EffectSize(
+            name="eta² (max)",
+            value=main_eta,
+            interpretation=_eta_sq_interp(main_eta),
+        )
+
+    factor_list = ", ".join(factors)
+    n_sig = sum(1 for t in terms if t["p_value"] < 0.05)
+    plain = (
+        f"A factorial ANOVA was performed on {outcome} with factors {factor_list} "
+        f"(R² = {r_squared:.3f}). "
+        f"{n_sig} of {len(terms)} effects were statistically significant."
+    )
+    apa = (
+        f"A factorial ANOVA examined the effects of {factor_list} on {outcome}. "
+        f"The model explained {r_squared:.1%} of the variance in {outcome}."
+    )
+    technical = (
+        f"Factorial ANOVA — outcome: {outcome}, factors: {factor_list}, "
+        f"N = {n_total}, R² = {r_squared:.4f}, formula: {formula}"
+    )
+
+    return AnalysisResult(
+        test_key="factorial_anova",
+        test_name="Factorial ANOVA",
+        n_obs=n_total,
+        statistics=statistics,
+        assumption_checks=checks,
+        interpretation=Interpretation(plain=plain, apa=apa, technical=technical),
+        effect_size=effect,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _bonferroni_posthoc(valid: pd.DataFrame, outcome: str, group: str, groups) -> list[dict]:
+    """Pairwise t-tests with Bonferroni correction."""
+    group_list = list(groups)
+    pairs = []
+    for i in range(len(group_list)):
+        for j in range(i + 1, len(group_list)):
+            a = valid[valid[group] == group_list[i]][outcome].astype(float)
+            b = valid[valid[group] == group_list[j]][outcome].astype(float)
+            t_stat, p_raw = stats.ttest_ind(a, b)
+            pairs.append({
+                "group1": str(group_list[i]),
+                "group2": str(group_list[j]),
+                "mean_diff": round(float(a.mean() - b.mean()), 4),
+                "p_raw": p_raw,
+            })
+    n_comparisons = len(pairs)
+    for p in pairs:
+        p["p_adj"] = round(min(float(p["p_raw"]) * n_comparisons, 1.0), 4)
+        p["reject"] = p["p_adj"] < 0.05
+        del p["p_raw"]
+    return pairs
+
+
+def _safe_col(name: str) -> str:
+    """Wrap column name in Q() if it contains spaces or special chars."""
+    if name.replace("_", "").replace(".", "").isalnum():
+        return name
+    return f'Q("{name}")'
 
 
 def _eta_sq_interp(eta_sq: float) -> str:

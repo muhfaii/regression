@@ -1,6 +1,7 @@
 """Descriptive statistics module."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 from scipy import stats
 
@@ -17,11 +18,19 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         s = df[var].dropna()
         if s.empty:
             raise ValueError(f"Column '{var}' has no non-missing values.")
+        n = int(len(s))
+        mean = float(s.mean())
+        sd = float(s.std())
+        se = sd / np.sqrt(n)
+        t_crit = float(stats.t.ppf(0.975, n - 1)) if n > 1 else 0.0
         col_stats[var] = {
-            "n": int(len(s)),
-            "mean": round(float(s.mean()), 4),
+            "n": n,
+            "mean": round(mean, 4),
             "median": round(float(s.median()), 4),
-            "sd": round(float(s.std()), 4),
+            "sd": round(sd, 4),
+            "se": round(se, 4),
+            "ci_lower": round(mean - t_crit * se, 4),
+            "ci_upper": round(mean + t_crit * se, 4),
             "min": round(float(s.min()), 4),
             "max": round(float(s.max()), 4),
             "q1": round(float(s.quantile(0.25)), 4),
