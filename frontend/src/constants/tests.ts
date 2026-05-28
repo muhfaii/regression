@@ -162,6 +162,19 @@ export const TEST_CATALOG: TestDefinition[] = [
       { key: 'covariates', label: 'Covariates (optional)', required_type: 'any', multiple: true },
     ],
   },
+  {
+    key: 'mediation',
+    name: 'Mediation Analysis',
+    category: 'Regression',
+    descriptor: 'indirect effects',
+    tooltip: 'Tests whether the relationship between a predictor and outcome is mediated through a third variable.',
+    slots: [
+      { key: 'outcome', label: 'Outcome variable', required_type: 'continuous', multiple: false },
+      { key: 'predictor', label: 'Predictor variable', required_type: 'any', multiple: false },
+      { key: 'mediator', label: 'Mediator variable', required_type: 'any', multiple: false },
+      { key: 'covariates', label: 'Covariates (optional)', required_type: 'any', multiple: true },
+    ],
+  },
 
   // ── Advanced (coming soon) ─────────────────────────────────────────────────
   {

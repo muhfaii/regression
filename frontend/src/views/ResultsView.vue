@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useResultsStore } from '../stores/results'
 import { useSessionStore } from '../stores/session'
+import type { DescStat, VifEntry, Remediation, CoefficientRow } from '../types/results'
 import ExportPanel from '../components/results/ExportPanel.vue'
 
 const router = useRouter()
@@ -26,7 +27,7 @@ const STATUS_ICON: Record<string, string> = { pass: '✓', amber: '⚠', fail: '
 const STATUS_CLASS: Record<string, string> = { pass: 'check-pass', amber: 'check-amber', fail: 'check-fail' }
 
 // Top-level scalar keys rendered as headline cards (skip structural sub-objects)
-const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type', 'simple_slopes', 'jn_region', 'floodlight', 'interaction_f2', 'predictor', 'moderator', 'covariates'])
+const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type', 'simple_slopes', 'jn_region', 'floodlight', 'interaction_f2', 'predictor', 'moderator', 'covariates', 'path_a', 'path_b', 'path_c', 'path_c_prime', 'indirect_effect', 'sobel_z', 'sobel_p', 'bootstrap_ci_low', 'bootstrap_ci_high', 'proportion_mediated', 'mediation_type', 'r_squared_x_m', 'r_squared_x_y', 'r_squared_xm_y', 'coefficients_x_m', 'coefficients_x_y', 'coefficients_xm_y', 'mediator', 'desc_stats', 'vif_table', 'remediation', 'se_justification', 'se_citation'])
 
 function scalarCards(stats: Record<string, unknown>) {
   return Object.entries(stats).filter(([k, v]) =>
@@ -61,7 +62,38 @@ const groupStats = computed(() => {
 const coefficients = computed(() => {
   const c = result.value?.statistics?.coefficients
   if (!c || typeof c !== 'object' || Object.keys(c).length === 0) return null
-  return c as Record<string, Record<string, number>>
+  return c as Record<string, CoefficientRow>
+})
+
+// Descriptive stats for model variables (regression models)
+const descStats = computed(() => {
+  const d = result.value?.statistics?.desc_stats
+  if (!Array.isArray(d) || d.length === 0) return null
+  return d as DescStat[]
+})
+
+// VIF per-variable table
+const vifTable = computed(() => {
+  const v = result.value?.statistics?.vif_table
+  if (!Array.isArray(v) || v.length === 0) return null
+  return v as VifEntry[]
+})
+
+// Remediation data (cross-patterns + per-test remedies)
+const remediationData = computed(() => {
+  const r = result.value?.statistics?.remediation
+  if (!r || typeof r !== 'object') return null
+  return r as Remediation
+})
+
+// SE justification text
+const seJustification = computed(() => {
+  return result.value?.statistics?.se_justification as string | undefined
+})
+
+// SE citation text
+const seCitation = computed(() => {
+  return result.value?.statistics?.se_citation as string | undefined
 })
 
 // Correlation matrix
@@ -130,6 +162,29 @@ const moderationData = computed(() => {
     jnRegion: s.jn_region as { has_region: boolean; lower_bound: number | null; upper_bound: number | null },
     predictor: s.predictor as string,
     moderator: s.moderator as string,
+    outcome: s.outcome as string,
+  }
+})
+
+// Mediation data
+const mediationData = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'mediation') return null
+  const s = r.statistics
+  return {
+    pathA: s.path_a as { coef: number; se: number; t: number; p: number },
+    pathB: s.path_b as { coef: number; se: number; t: number; p: number },
+    pathC: s.path_c as { coef: number; se: number; t: number; p: number },
+    pathCPrime: s.path_c_prime as { coef: number; se: number; t: number; p: number },
+    indirectEffect: s.indirect_effect as number,
+    sobelZ: s.sobel_z as number,
+    sobelP: s.sobel_p as number,
+    bootstrapCILow: s.bootstrap_ci_low as number,
+    bootstrapCIHigh: s.bootstrap_ci_high as number,
+    proportionMediated: s.proportion_mediated as number,
+    mediationType: s.mediation_type as string,
+    predictor: s.predictor as string,
+    mediator: s.mediator as string,
     outcome: s.outcome as string,
   }
 })
@@ -221,16 +276,137 @@ function newAnalysis() {
           <thead>
             <tr>
               <th>Predictor</th>
-              <th v-for="col in Object.keys(Object.values(coefficients)[0])" :key="col">{{ fmtLabel(col) }}</th>
+              <th>Coefficient</th>
+              <th>SE</th>
+              <th>t</th>
+              <th>p</th>
+              <th>95% CI</th>
+              <th>Sig.</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(stats, pred) in coefficients" :key="pred">
+            <tr v-for="(row, pred) in coefficients" :key="pred" :class="{ 'sig-row': row.significant }">
               <td class="group-name">{{ pred }}</td>
-              <td v-for="val in Object.values(stats)" :key="String(val)">{{ fmt(val) }}</td>
+              <td>{{ row.coef }}</td>
+              <td>{{ row.se }}</td>
+              <td>{{ row.t }}</td>
+              <td>{{ row.p.toFixed(4) }}</td>
+              <td>[{{ row.ci_low }}, {{ row.ci_high }}]</td>
+              <td>
+                <span v-if="row.significant" class="badge-sig" style="font-size:12px;font-weight:700;color:#4c1d95;background:#ede9fe;padding:2px 8px;border-radius:10px;">p &lt; 0.05</span>
+                <span v-else class="badge-ns" style="font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:10px;">n.s.</span>
+              </td>
             </tr>
           </tbody>
         </table>
+        <p v-if="seCitation" style="margin-top:8px;font-size:13px;color:#374151;">{{ seCitation }}</p>
+        <p v-if="seJustification" style="margin-top:4px;font-size:12px;color:#6b7280;font-style:italic;">{{ seJustification }}</p>
+      </div>
+
+      <!-- Descriptive stats for regression model variables -->
+      <div v-if="descStats && result?.test_key !== 'descriptive'" class="section">
+        <h3 class="section-title">Descriptive statistics</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Mean</th>
+              <th>Std Dev</th>
+              <th>Min</th>
+              <th>Median</th>
+              <th>Max</th>
+              <th>Missing</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in descStats" :key="s.variable">
+              <td class="group-name">{{ s.variable }}</td>
+              <td>{{ s.mean }}</td>
+              <td>{{ s.std }}</td>
+              <td>{{ s.min }}</td>
+              <td>{{ s.median }}</td>
+              <td>{{ s.max }}</td>
+              <td>{{ s.missing }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- VIF per-variable table -->
+      <div v-if="vifTable" class="section">
+        <h3 class="section-title">Variance Inflation Factor (VIF)</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>VIF</th>
+              <th>Flag</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="e in vifTable" :key="e.variable">
+              <td class="group-name">{{ e.variable }}</td>
+              <td>{{ e.vif }}</td>
+              <td>
+                <span v-if="e.verdict === 'concern'" class="vif-badge vif-concern">Concern (&gt;10)</span>
+                <span v-else-if="e.verdict === 'examine'" class="vif-badge vif-examine">Examine (5–10)</span>
+                <span v-else class="vif-badge vif-ok">OK</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Model robustness / SE justification -->
+      <div v-if="seJustification" class="section">
+        <h3 class="section-title">Model robustness</h3>
+        <div class="robustness-card">
+          <div class="robustness-row">
+            <span class="robustness-label">Standard error type</span>
+            <span class="robustness-value">{{ result?.statistics?.se_type || 'classical' }}</span>
+          </div>
+          <div class="robustness-row">
+            <span class="robustness-label">Justification</span>
+            <span class="robustness-value">{{ seJustification }}</span>
+          </div>
+          <p v-if="seCitation" class="robustness-citation">{{ seCitation }}</p>
+        </div>
+      </div>
+
+      <!-- Remediation / Recommendations -->
+      <div v-if="remediationData" class="section">
+        <h3 class="section-title">Recommendations</h3>
+
+        <!-- Cross-diagnostic patterns -->
+        <div v-if="remediationData.patterns.length" class="remediation-patterns">
+          <div
+            v-for="p in remediationData.patterns"
+            :key="p.id"
+            class="pattern-card"
+            :class="'pattern-' + p.severity"
+          >
+            <div class="pattern-title">{{ p.id.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }}</div>
+            <p class="pattern-interp">{{ p.interpretation }}</p>
+            <p class="pattern-rec"><strong>Recommendation:</strong> {{ p.recommendation }}</p>
+          </div>
+        </div>
+
+        <!-- Per-test remedies -->
+        <div v-for="t in remediationData.per_test" :key="t.test_id" class="remedy-group">
+          <p class="remedy-group-title">
+            <span class="remedy-verdict-badge" :class="'verdict-' + t.verdict">{{ t.verdict.toUpperCase() }}</span>
+            {{ t.test_name }}
+          </p>
+          <div v-for="rem in t.remedies" :key="rem.priority" class="remedy-card">
+            <div class="remedy-header">
+              <span class="remedy-num">{{ rem.priority }}.</span>
+              <span class="remedy-desc">{{ rem.description }}</span>
+              <span class="remedy-kind" :class="'kind-' + rem.kind">{{ rem.kind === 'quick_fix' ? 'quick fix' : 'thinking fix' }}</span>
+            </div>
+            <p class="remedy-why">{{ rem.why }}</p>
+          </div>
+          <p v-if="t.honest_caveat" class="remedy-caveat">{{ t.honest_caveat }}</p>
+        </div>
       </div>
 
       <!-- Correlation matrix -->
@@ -438,6 +614,88 @@ function newAnalysis() {
             when {{ moderationData.moderator }} is below {{ moderationData.jnRegion.upper_bound }}.
           </template>
         </p>
+      </div>
+
+      <!-- Mediation: path coefficients table -->
+      <div v-if="mediationData" class="section">
+        <h3 class="section-title">Mediation paths</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Description</th>
+              <th>Coefficient</th>
+              <th>SE</th>
+              <th>t</th>
+              <th>p</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr :class="{ 'sig-row': mediationData.pathA.p < 0.05 }">
+              <td class="group-name">a</td>
+              <td>{{ mediationData.predictor }} → {{ mediationData.mediator }}</td>
+              <td>{{ mediationData.pathA.coef }}</td>
+              <td>{{ mediationData.pathA.se }}</td>
+              <td>{{ mediationData.pathA.t }}</td>
+              <td>{{ mediationData.pathA.p.toFixed(4) }}</td>
+            </tr>
+            <tr :class="{ 'sig-row': mediationData.pathB.p < 0.05 }">
+              <td class="group-name">b</td>
+              <td>{{ mediationData.mediator }} → {{ mediationData.outcome }}</td>
+              <td>{{ mediationData.pathB.coef }}</td>
+              <td>{{ mediationData.pathB.se }}</td>
+              <td>{{ mediationData.pathB.t }}</td>
+              <td>{{ mediationData.pathB.p.toFixed(4) }}</td>
+            </tr>
+            <tr :class="{ 'sig-row': mediationData.pathC.p < 0.05 }">
+              <td class="group-name">c (total)</td>
+              <td>{{ mediationData.predictor }} → {{ mediationData.outcome }}</td>
+              <td>{{ mediationData.pathC.coef }}</td>
+              <td>{{ mediationData.pathC.se }}</td>
+              <td>{{ mediationData.pathC.t }}</td>
+              <td>{{ mediationData.pathC.p.toFixed(4) }}</td>
+            </tr>
+            <tr :class="{ 'sig-row': mediationData.pathCPrime.p < 0.05 }">
+              <td class="group-name">c' (direct)</td>
+              <td>{{ mediationData.predictor }} → {{ mediationData.outcome }} (controlling for {{ mediationData.mediator }})</td>
+              <td>{{ mediationData.pathCPrime.coef }}</td>
+              <td>{{ mediationData.pathCPrime.se }}</td>
+              <td>{{ mediationData.pathCPrime.t }}</td>
+              <td>{{ mediationData.pathCPrime.p.toFixed(4) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Mediation: indirect effect with Sobel test and bootstrap CI -->
+      <div v-if="mediationData" class="section">
+        <h3 class="section-title">Indirect effect</h3>
+        <div class="panel-test-card">
+          <div class="panel-test-row">
+            <span class="panel-test-label">Indirect effect (a × b)</span>
+            <span>{{ mediationData.indirectEffect }}</span>
+          </div>
+          <div class="panel-test-row">
+            <span class="panel-test-label">Sobel z</span>
+            <span>{{ mediationData.sobelZ }}</span>
+          </div>
+          <div class="panel-test-row">
+            <span class="panel-test-label">Sobel p</span>
+            <span>{{ mediationData.sobelP.toFixed(4) }}</span>
+          </div>
+          <div class="panel-test-row">
+            <span class="panel-test-label">Bootstrap 95% CI</span>
+            <span>[{{ mediationData.bootstrapCILow }}, {{ mediationData.bootstrapCIHigh }}]</span>
+          </div>
+          <div class="panel-test-row">
+            <span class="panel-test-label">Proportion mediated</span>
+            <span>{{ (mediationData.proportionMediated * 100).toFixed(1) }}%</span>
+          </div>
+          <div class="panel-test-row">
+            <span class="panel-test-label">Mediation type</span>
+            <span class="mediation-badge" :class="'mediation-' + mediationData.mediationType">{{ mediationData.mediationType }}</span>
+          </div>
+        </div>
       </div>
 
       <!-- Effect size -->
@@ -663,4 +921,61 @@ function newAnalysis() {
 .model-pooled_ols { background: #6b7280; }
 .panel-absorbed-note { font-size: 13px; color: var(--color-text-muted); }
 .jn-text { font-size: 14px; line-height: 1.6; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px; }
+.mediation-badge { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px; text-transform: capitalize; }
+.mediation-none { background: #e5e7eb; color: #374151; }
+.mediation-partial { background: #fef3c7; color: #92400e; }
+.mediation-full { background: #d1fae5; color: #065f46; }
+
+/* VIF badges */
+.vif-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.vif-concern { background: #fee2e2; color: #991b1b; }
+.vif-examine { background: #fef3c7; color: #92400e; }
+.vif-ok { background: #d1fae5; color: #065f46; }
+
+/* Robustness card */
+.robustness-card {
+  border: 1px solid var(--color-border); border-radius: 8px;
+  padding: 12px 16px; display: flex; flex-direction: column; gap: 6px;
+  font-size: 13px;
+}
+.robustness-row { display: flex; justify-content: space-between; }
+.robustness-label { color: var(--color-text-muted); font-weight: 600; }
+.robustness-value { color: var(--color-text); }
+.robustness-citation { font-size: 12px; color: var(--color-text-muted); margin-top: 4px; font-style: italic; }
+
+/* Remediation patterns */
+.remediation-patterns { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.pattern-card {
+  border-radius: 6px; padding: 12px 16px;
+  border: 1px solid var(--color-border);
+}
+.pattern-high { background: #fff1f2; border-left: 4px solid #f43f5e; }
+.pattern-medium { background: #fffbeb; border-left: 4px solid #f59e0b; }
+.pattern-low { background: #eff6ff; border-left: 4px solid #3b82f6; }
+.pattern-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.pattern-interp { font-size: 13px; color: var(--color-text-muted); margin-bottom: 6px; }
+.pattern-rec { font-size: 13px; font-style: italic; color: var(--color-text); }
+
+/* Remedy cards */
+.remedy-group { margin-bottom: 16px; }
+.remedy-group-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.remedy-verdict-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; letter-spacing: 0.04em; }
+.verdict-fail { background: #fee2e2; color: #991b1b; }
+.verdict-borderline { background: #fef3c7; color: #92400e; }
+.remedy-card {
+  border: 1px solid var(--color-border); border-radius: 6px;
+  padding: 10px 14px; margin-bottom: 8px; font-size: 13px;
+}
+.remedy-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.remedy-num { color: var(--color-text-muted); font-size: 12px; min-width: 20px; }
+.remedy-desc { font-weight: 500; }
+.remedy-kind { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; margin-left: auto; }
+.kind-quick_fix { background: #d1fae5; color: #065f46; }
+.kind-thinking_fix { background: #f3f4f6; color: #6b7280; }
+.remedy-why { font-size: 12px; color: var(--color-text-muted); margin-left: 28px; }
+.remedy-caveat {
+  font-size: 12px; color: #78350f; background: #fffbeb;
+  border: 1px solid #fcd34d; border-radius: 6px;
+  padding: 8px 12px; margin-bottom: 10px;
+}
 </style>
