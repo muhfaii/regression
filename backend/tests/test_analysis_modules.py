@@ -9,6 +9,7 @@ from backend.analysis_modules import (
     correlation,
     descriptive,
     logistic,
+    moderation,
     multicomp,
     nonparametric,
     panel,
@@ -328,6 +329,54 @@ def test_logistic_missing_config(categorical_df):
 
 
 # ---------------------------------------------------------------------------
+# Moderation analysis
+# ---------------------------------------------------------------------------
+
+def test_moderation_happy(continuous_df):
+    result = moderation.run(continuous_df, {
+        "outcome": "score",
+        "predictor": "pre",
+        "moderator": "post",
+    }, OPTS)
+    assert result.test_key == "moderation"
+    assert "coefficients" in result.statistics
+    assert "simple_slopes" in result.statistics
+    assert "jn_region" in result.statistics
+    assert "interaction_f2" in result.statistics
+    assert result.statistics["coefficients"]  # at least predictor, moderator, interaction
+    assert len(result.statistics["simple_slopes"]) == 3  # -1SD, mean, +1SD
+    assert result.effect_size is not None
+
+
+def test_moderation_with_covariates(continuous_df):
+    result = moderation.run(continuous_df, {
+        "outcome": "score",
+        "predictor": "pre",
+        "moderator": "post",
+        "covariates": ["group"],
+    }, OPTS)
+    assert result.test_key == "moderation"
+    # group is categorical → expanded to dummies
+    has_group_dummy = any(k.startswith("group_") for k in result.statistics["coefficients"])
+    assert has_group_dummy, f"No group_* dummy in coefficients: {list(result.statistics['coefficients'].keys())}"
+
+
+def test_moderation_missing_outcome(continuous_df):
+    with pytest.raises(ValueError, match="outcome is required"):
+        moderation.run(continuous_df, {"predictor": "pre", "moderator": "post"}, OPTS)
+
+
+def test_moderation_missing_predictor(continuous_df):
+    with pytest.raises(ValueError, match="predictor is required"):
+        moderation.run(continuous_df, {"outcome": "score", "moderator": "post"}, OPTS)
+
+
+def test_moderation_missing_moderator(continuous_df):
+    with pytest.raises(ValueError, match="moderator is required"):
+        moderation.run(continuous_df, {"outcome": "score", "predictor": "pre"}, OPTS)
+
+
+# ---------------------------------------------------------------------------
 # Multiple comparison corrections
 # ---------------------------------------------------------------------------
 
@@ -429,6 +478,7 @@ def test_regression_no_p_adjust(continuous_df):
     (lambda df: correlation.run(df, {"variables": ["pre", "post"]}, OPTS), "continuous_df"),
     (lambda df: anova.run_factorial(df, {"outcome": "score", "factors": ["group", "group2"]}, OPTS), "continuous_df"),
     (lambda df: panel.run(df, {"dep_var": "y", "indep_vars": ["x1", "x2"], "entity_col": "entity_id", "time_col": "year"}, OPTS), "panel_df"),
+    (lambda df: moderation.run(df, {"outcome": "score", "predictor": "pre", "moderator": "post"}, OPTS), "continuous_df"),
 ])
 def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df):
     m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df}

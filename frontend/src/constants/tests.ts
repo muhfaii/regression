@@ -149,6 +149,19 @@ export const TEST_CATALOG: TestDefinition[] = [
       { key: 'predictors', label: 'Predictor variables', required_type: 'any', multiple: true },
     ],
   },
+  {
+    key: 'moderation',
+    name: 'Moderation Analysis',
+    category: 'Regression',
+    descriptor: 'interaction effects',
+    tooltip: 'Tests whether the relationship between a predictor and outcome depends on a third variable (moderator).',
+    slots: [
+      { key: 'outcome', label: 'Outcome variable', required_type: 'continuous', multiple: false },
+      { key: 'predictor', label: 'Predictor variable', required_type: 'any', multiple: false },
+      { key: 'moderator', label: 'Moderator variable', required_type: 'any', multiple: false },
+      { key: 'covariates', label: 'Covariates (optional)', required_type: 'any', multiple: true },
+    ],
+  },
 
   // ── Advanced (coming soon) ─────────────────────────────────────────────────
   {

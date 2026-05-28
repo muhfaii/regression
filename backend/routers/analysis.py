@@ -9,6 +9,7 @@ from backend.analysis_modules import (
     correlation,
     descriptive,
     logistic,
+    moderation,
     nonparametric,
     panel,
     regression,
@@ -48,6 +49,7 @@ _RUNNERS = {
     "ols_regression": _run_ols,
     "panel_regression": panel.run,
     "logistic_regression": logistic.run,
+    "moderation": moderation.run,
 }
 
 # Slot type requirements — mirrors TEST_CATALOG in frontend/src/constants/tests.ts
@@ -65,6 +67,7 @@ _SLOT_TYPES: dict[str, dict[str, str]] = {
     "ols_regression": {"dep_var": "continuous", "indep_vars": "any"},
     "panel_regression": {"dep_var": "continuous", "indep_vars": "any", "entity_col": "any", "time_col": "any"},
     "logistic_regression": {"outcome": "categorical", "predictors": "any"},
+    "moderation": {"outcome": "continuous", "predictor": "any", "moderator": "any", "covariates": "any"},
 }
 
 

@@ -26,7 +26,7 @@ const STATUS_ICON: Record<string, string> = { pass: '✓', amber: '⚠', fail: '
 const STATUS_CLASS: Record<string, string> = { pass: 'check-pass', amber: 'check-amber', fail: 'check-fail' }
 
 // Top-level scalar keys rendered as headline cards (skip structural sub-objects)
-const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type'])
+const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type', 'simple_slopes', 'jn_region', 'floodlight', 'interaction_f2', 'predictor', 'moderator', 'covariates'])
 
 function scalarCards(stats: Record<string, unknown>) {
   return Object.entries(stats).filter(([k, v]) =>
@@ -117,6 +117,20 @@ const panelData = computed(() => {
     hausman: s.hausman as { statistic: number; p_value: number; verdict: string; dof: number } | null,
     selectionSteps: s.selection_steps as { test_name: string; statistic: number | null; p_value: number | null; verdict: string; chosen_model: string; note: string }[],
     absorbedVars: s.absorbed_vars as string[],
+  }
+})
+
+// Moderation data
+const moderationData = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'moderation') return null
+  const s = r.statistics
+  return {
+    simpleSlopes: s.simple_slopes as Record<string, { moderator_value: number; slope: number; se: number; t: number; p: number; ci_low: number; ci_high: number }>,
+    jnRegion: s.jn_region as { has_region: boolean; lower_bound: number | null; upper_bound: number | null },
+    predictor: s.predictor as string,
+    moderator: s.moderator as string,
+    outcome: s.outcome as string,
   }
 })
 
@@ -379,6 +393,53 @@ function newAnalysis() {
         </p>
       </div>
 
+      <!-- Moderation: simple slopes table -->
+      <div v-if="moderationData" class="section">
+        <h3 class="section-title">Simple slopes</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Moderator level</th>
+              <th>Value</th>
+              <th>Slope</th>
+              <th>SE</th>
+              <th>t</th>
+              <th>p</th>
+              <th>95% CI</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, level) in moderationData.simpleSlopes" :key="level" :class="{ 'sig-row': row.p < 0.05 }">
+              <td class="group-name">{{ fmtLabel(level) }}</td>
+              <td>{{ row.moderator_value }}</td>
+              <td>{{ row.slope }}</td>
+              <td>{{ row.se }}</td>
+              <td>{{ row.t }}</td>
+              <td>{{ row.p.toFixed(4) }}</td>
+              <td>[{{ row.ci_low }}, {{ row.ci_high }}]</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Moderation: Johnson-Neyman region -->
+      <div v-if="moderationData?.jnRegion?.has_region" class="section">
+        <h3 class="section-title">Johnson-Neyman significance region</h3>
+        <p class="jn-text">
+          The simple slope of {{ moderationData.predictor }} on {{ moderationData.outcome }}
+          is significant
+          <template v-if="moderationData.jnRegion.lower_bound !== null && moderationData.jnRegion.upper_bound !== null">
+            when {{ moderationData.moderator }} is between {{ moderationData.jnRegion.lower_bound }} and {{ moderationData.jnRegion.upper_bound }}.
+          </template>
+          <template v-else-if="moderationData.jnRegion.lower_bound !== null">
+            when {{ moderationData.moderator }} is above {{ moderationData.jnRegion.lower_bound }}.
+          </template>
+          <template v-else-if="moderationData.jnRegion.upper_bound !== null">
+            when {{ moderationData.moderator }} is below {{ moderationData.jnRegion.upper_bound }}.
+          </template>
+        </p>
+      </div>
+
       <!-- Effect size -->
       <div v-if="result.effect_size" class="effect-size-section">
         <span class="effect-label">{{ result.effect_size.name }}:</span>
@@ -601,4 +662,5 @@ function newAnalysis() {
 .model-re { background: #2563eb; }
 .model-pooled_ols { background: #6b7280; }
 .panel-absorbed-note { font-size: 13px; color: var(--color-text-muted); }
+.jn-text { font-size: 14px; line-height: 1.6; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px; }
 </style>
