@@ -10,6 +10,7 @@ from backend.analysis_modules import (
     descriptive,
     logistic,
     nonparametric,
+    panel,
     t_tests,
 )
 from backend.schemas.analysis import AnalysisOptions
@@ -39,6 +40,24 @@ def continuous_df():
         "pre": rng.normal(40, 8, 60).tolist(),
         "post": rng.normal(45, 8, 60).tolist(),
     })
+
+
+@pytest.fixture
+def panel_df():
+    rng = np.random.default_rng(42)
+    entities = ["A", "B", "C", "D"]
+    years = [2010, 2011, 2012, 2013]
+    rows = []
+    for e in entities:
+        for y in years:
+            rows.append({
+                "entity_id": e,
+                "year": y,
+                "y": rng.normal(0, 1),
+                "x1": rng.normal(5, 2),
+                "x2": rng.normal(10, 3),
+            })
+    return pd.DataFrame(rows)
 
 
 @pytest.fixture
@@ -122,8 +141,9 @@ def test_anova_happy(continuous_df):
 def test_anova_post_hoc(continuous_df):
     result = anova.run(continuous_df, {"outcome": "score", "group": "group"}, OPTS)
     # Post-hoc is only populated when p < 0.05; check structure if present
-    if result.statistics["post_hoc"]:
-        assert "group1" in result.statistics["post_hoc"][0]
+    ph = result.statistics.get("post_hoc")
+    if ph:
+        assert "group1" in ph[0]
 
 
 def test_anova_too_few_groups(continuous_df):
@@ -164,26 +184,54 @@ def test_kruskal_wallis_too_few_groups(continuous_df):
 
 
 # ---------------------------------------------------------------------------
-# Correlation
+# Correlation (matrix)
 # ---------------------------------------------------------------------------
 
 def test_correlation_happy(continuous_df):
-    result = correlation.run(continuous_df, {"col_a": "pre", "col_b": "post"}, OPTS)
+    result = correlation.run(continuous_df, {"variables": ["pre", "post"]}, OPTS)
     assert result.test_key == "correlation"
-    assert "pearson" in result.statistics
-    assert "spearman" in result.statistics
-    assert "kendall" in result.statistics
+    assert "matrix_pearson" in result.statistics
+    assert "matrix_spearman" in result.statistics
+    assert "matrix_kendall" in result.statistics
+    assert result.statistics["n_vars"] == 2
+
+
+def test_correlation_multi_vars(continuous_df):
+    result = correlation.run(continuous_df, {"variables": ["score", "pre", "post"]}, OPTS)
+    assert result.statistics["n_vars"] == 3
+    assert len(result.statistics["matrix_pearson"]) == 3
 
 
 def test_correlation_missing_config(continuous_df):
-    with pytest.raises(ValueError, match="required"):
-        correlation.run(continuous_df, {"col_a": "pre"}, OPTS)
+    with pytest.raises(ValueError, match="At least two variables"):
+        correlation.run(continuous_df, {"variables": ["score"]}, OPTS)
 
 
 def test_correlation_too_few_obs():
     df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
     with pytest.raises(ValueError, match="At least 3"):
-        correlation.run(df, {"col_a": "a", "col_b": "b"}, OPTS)
+        correlation.run(df, {"variables": ["a", "b"]}, OPTS)
+
+
+# ---------------------------------------------------------------------------
+# Factorial ANOVA
+# ---------------------------------------------------------------------------
+
+def test_factorial_anova_happy(continuous_df):
+    result = anova.run_factorial(continuous_df, {"outcome": "score", "factors": ["group", "group2"]}, OPTS)
+    assert result.test_key == "factorial_anova"
+    assert "terms" in result.statistics
+    assert len(result.statistics["terms"]) >= 2
+
+
+def test_factorial_anova_too_few_factors(continuous_df):
+    with pytest.raises(ValueError, match="at least two factors"):
+        anova.run_factorial(continuous_df, {"outcome": "score", "factors": ["group"]}, OPTS)
+
+
+def test_factorial_anova_missing_config(continuous_df):
+    with pytest.raises(ValueError, match="required"):
+        anova.run_factorial(continuous_df, {"outcome": "score"}, OPTS)
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +248,60 @@ def test_chi_square_happy(categorical_df):
 def test_chi_square_missing_config(categorical_df):
     with pytest.raises(ValueError, match="required"):
         chi_square.run(categorical_df, {"col_a": "gender"}, OPTS)
+
+
+# ---------------------------------------------------------------------------
+# Panel regression
+# ---------------------------------------------------------------------------
+
+def test_panel_regression_happy(panel_df):
+    result = panel.run(panel_df, {
+        "dep_var": "y",
+        "indep_vars": ["x1", "x2"],
+        "entity_col": "entity_id",
+        "time_col": "year",
+    }, OPTS)
+    assert result.test_key == "panel_regression"
+    assert result.statistics["model_type"] in ("fe", "re", "pooled_ols")
+    assert "r_squared" in result.statistics
+    assert "bplm" in result.statistics
+    assert "hausman" in result.statistics
+    assert len(result.statistics["coefficients"]) > 0
+    assert result.statistics["selection_steps"]
+
+
+def test_panel_missing_entity_col(panel_df):
+    with pytest.raises(ValueError, match="entity_col is required"):
+        panel.run(panel_df, {
+            "dep_var": "y",
+            "indep_vars": ["x1"],
+            "time_col": "year",
+        }, OPTS)
+
+
+def test_panel_missing_time_col(panel_df):
+    with pytest.raises(ValueError, match="time_col is required"):
+        panel.run(panel_df, {
+            "dep_var": "y",
+            "indep_vars": ["x1"],
+            "entity_col": "entity_id",
+        }, OPTS)
+
+
+def test_panel_se_override(panel_df):
+    class _SeOpts:
+        assumption_checks = True
+        effect_size = True
+        post_hoc = False
+        se_type = "CR1"
+    result = panel.run(panel_df, {
+        "dep_var": "y",
+        "indep_vars": ["x1", "x2"],
+        "entity_col": "entity_id",
+        "time_col": "year",
+    }, _SeOpts())
+    assert isinstance(result.statistics["se_type"], str)
+    assert result.statistics["se_type"]
 
 
 # ---------------------------------------------------------------------------
@@ -235,10 +337,13 @@ def test_logistic_missing_config(categorical_df):
     (lambda df: nonparametric.run_mann_whitney(df, {"outcome": "score", "group": "group2"}, OPTS), "continuous_df"),
     (lambda df: nonparametric.run_wilcoxon(df, {"col_a": "pre", "col_b": "post"}, OPTS), "continuous_df"),
     (lambda df: nonparametric.run_kruskal_wallis(df, {"outcome": "score", "group": "group"}, OPTS), "continuous_df"),
-    (lambda df: correlation.run(df, {"col_a": "pre", "col_b": "post"}, OPTS), "continuous_df"),
+    (lambda df: correlation.run(df, {"variables": ["pre", "post"]}, OPTS), "continuous_df"),
+    (lambda df: anova.run_factorial(df, {"outcome": "score", "factors": ["group", "group2"]}, OPTS), "continuous_df"),
+    (lambda df: panel.run(df, {"dep_var": "y", "indep_vars": ["x1", "x2"], "entity_col": "entity_id", "time_col": "year"}, OPTS), "panel_df"),
 ])
-def test_interpretation_fields(result_fn, args, continuous_df, categorical_df):
-    df = continuous_df if args == "continuous_df" else categorical_df
+def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df):
+    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df}
+    df = m[args]
     result = result_fn(df)
     assert result.interpretation.plain
     assert result.interpretation.apa

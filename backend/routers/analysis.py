@@ -10,6 +10,7 @@ from backend.analysis_modules import (
     descriptive,
     logistic,
     nonparametric,
+    panel,
     regression,
     t_tests,
 )
@@ -38,12 +39,14 @@ _RUNNERS = {
     "independent_t": t_tests.run_independent_t,
     "paired_t": t_tests.run_paired_t,
     "one_way_anova": anova.run,
+    "factorial_anova": anova.run_factorial,
     "mann_whitney": nonparametric.run_mann_whitney,
     "wilcoxon": nonparametric.run_wilcoxon,
     "kruskal_wallis": nonparametric.run_kruskal_wallis,
     "correlation": correlation.run,
     "chi_square": chi_square.run,
     "ols_regression": _run_ols,
+    "panel_regression": panel.run,
     "logistic_regression": logistic.run,
 }
 
@@ -53,12 +56,14 @@ _SLOT_TYPES: dict[str, dict[str, str]] = {
     "independent_t": {"outcome": "continuous", "group": "categorical"},
     "paired_t": {"col_a": "continuous", "col_b": "continuous"},
     "one_way_anova": {"outcome": "continuous", "group": "categorical"},
+    "factorial_anova": {"outcome": "continuous", "factors": "categorical"},
     "mann_whitney": {"outcome": "continuous", "group": "categorical"},
     "wilcoxon": {"col_a": "continuous", "col_b": "continuous"},
     "kruskal_wallis": {"outcome": "continuous", "group": "categorical"},
-    "correlation": {"col_a": "continuous", "col_b": "continuous"},
+    "correlation": {"variables": "continuous"},
     "chi_square": {"col_a": "categorical", "col_b": "categorical"},
     "ols_regression": {"dep_var": "continuous", "indep_vars": "any"},
+    "panel_regression": {"dep_var": "continuous", "indep_vars": "any", "entity_col": "any", "time_col": "any"},
     "logistic_regression": {"outcome": "categorical", "predictors": "any"},
 }
 

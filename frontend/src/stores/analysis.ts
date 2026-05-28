@@ -12,6 +12,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
     assumption_checks: true,
     effect_size: true,
     post_hoc: false,
+    se_type: 'auto',
   })
 
   const selectedTest = computed(() => selectedTestKey.value ? getTest(selectedTestKey.value) : null)

@@ -7,6 +7,7 @@ class AnalysisOptions(BaseModel):
     assumption_checks: bool = True
     effect_size: bool = True
     post_hoc: bool = False
+    se_type: str = "auto"
 
 
 class RunRequest(BaseModel):

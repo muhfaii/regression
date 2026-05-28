@@ -158,6 +158,15 @@ async function runAnalysis() {
         <input type="checkbox" v-model="analysis.options.post_hoc" />
         Post-hoc tests (where applicable)
       </label>
+      <div v-if="test.key === 'panel_regression'" class="option-select">
+        <label class="option-select-label">Robust SE type</label>
+        <select v-model="analysis.options.se_type" class="option-select-input">
+          <option value="auto">Auto (recommended)</option>
+          <option value="CR0">CR0</option>
+          <option value="CR1">CR1</option>
+          <option value="CR2">CR2</option>
+        </select>
+      </div>
     </div>
 
     <div v-if="error" class="error-msg" role="alert">{{ error }}</div>
@@ -229,6 +238,18 @@ async function runAnalysis() {
 .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .validation-msg { font-size: 12px; color: var(--color-text-muted); margin-top: -16px; }
 .conflict-msg { color: #92400e; }
+.option-select { display: flex; flex-direction: column; gap: 4px; }
+.option-select-label { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.option-select-input {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: var(--color-bg);
+  width: 100%;
+  height: 36px;
+}
+.option-select-input:focus { outline: 2px solid var(--color-primary); }
 .error-msg {
   background: #fef2f2;
   border: 1px solid #fecaca;

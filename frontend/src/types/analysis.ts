@@ -29,5 +29,6 @@ export interface RunRequest {
     assumption_checks: boolean
     effect_size: boolean
     post_hoc: boolean
+    se_type: string
   }
 }

@@ -46,6 +46,17 @@ export const TEST_CATALOG: TestDefinition[] = [
     ],
   },
   {
+    key: 'factorial_anova',
+    name: 'Factorial ANOVA',
+    category: 'Compare groups',
+    descriptor: '2+ factors',
+    tooltip: 'Tests the effects of two or more categorical factors and their interactions on a continuous outcome.',
+    slots: [
+      { key: 'outcome', label: 'Outcome variable', required_type: 'continuous', multiple: false },
+      { key: 'factors', label: 'Factor variables', required_type: 'categorical', multiple: true },
+    ],
+  },
+  {
     key: 'mann_whitney',
     name: 'Mann-Whitney U',
     category: 'Compare groups',
@@ -85,10 +96,9 @@ export const TEST_CATALOG: TestDefinition[] = [
     name: 'Correlation',
     category: 'Relationships',
     descriptor: 'Pearson/Spearman/Kendall',
-    tooltip: 'Measures the strength and direction of the relationship between two variables.',
+    tooltip: 'Measures pairwise relationships between 2+ variables with Pearson, Spearman, and Kendall coefficients.',
     slots: [
-      { key: 'col_a', label: 'Variable A', required_type: 'continuous', multiple: false },
-      { key: 'col_b', label: 'Variable B', required_type: 'continuous', multiple: false },
+      { key: 'variables', label: 'Variables', required_type: 'continuous', multiple: true },
     ],
   },
   {
@@ -113,6 +123,19 @@ export const TEST_CATALOG: TestDefinition[] = [
     slots: [
       { key: 'dep_var', label: 'Outcome variable', required_type: 'continuous', multiple: false },
       { key: 'indep_vars', label: 'Predictor variables', required_type: 'any', multiple: true },
+    ],
+  },
+  {
+    key: 'panel_regression',
+    name: 'Panel Regression (FE/RE)',
+    category: 'Regression',
+    descriptor: 'panel data, entity-time',
+    tooltip: 'Estimates panel data models with automatic FE/RE/Pooled selection, BP-LM and Hausman tests.',
+    slots: [
+      { key: 'dep_var', label: 'Outcome variable', required_type: 'continuous', multiple: false },
+      { key: 'indep_vars', label: 'Predictor variables', required_type: 'any', multiple: true },
+      { key: 'entity_col', label: 'Entity column', required_type: 'any', multiple: false },
+      { key: 'time_col', label: 'Time column', required_type: 'any', multiple: false },
     ],
   },
   {

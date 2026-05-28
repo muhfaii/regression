@@ -14,11 +14,19 @@ const activeTab = ref<'plain' | 'apa' | 'technical'>(
   session.mode === 'browse' ? 'technical' : 'plain'
 )
 
+function corrColor(val: number): string {
+  const abs = Math.abs(val)
+  if (abs < 0.1) return 'transparent'
+  const sat = Math.min(abs * 1.2, 1)
+  if (val > 0) return `rgba(59, 130, 246, ${sat * 0.35})`
+  return `rgba(239, 68, 68, ${sat * 0.35})`
+}
+
 const STATUS_ICON: Record<string, string> = { pass: '✓', amber: '⚠', fail: '✗' }
 const STATUS_CLASS: Record<string, string> = { pass: 'check-pass', amber: 'check-amber', fail: 'check-fail' }
 
 // Top-level scalar keys rendered as headline cards (skip structural sub-objects)
-const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'contingency_table', 'outcome_categories'])
+const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type'])
 
 function scalarCards(stats: Record<string, unknown>) {
   return Object.entries(stats).filter(([k, v]) =>
@@ -56,12 +64,68 @@ const coefficients = computed(() => {
   return c as Record<string, Record<string, number>>
 })
 
-// Post-hoc: statistics.post_hoc
+// Correlation matrix
+const corrMatrix = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'correlation') return null
+  const names = r.statistics?.variable_names as string[] | undefined
+  const pearson = r.statistics?.matrix_pearson as number[][] | undefined
+  const spearman = r.statistics?.matrix_spearman as number[][] | undefined
+  const kendall = r.statistics?.matrix_kendall as number[][] | undefined
+  if (!names || !pearson) return null
+  return { names, pearson, spearman, kendall }
+})
+
+const corrType = ref<'pearson' | 'spearman' | 'kendall'>('pearson')
+
+// Post-hoc: statistics.post_hoc (Tukey)
 const postHoc = computed(() => {
   const ph = result.value?.statistics?.post_hoc
   if (!Array.isArray(ph) || ph.length === 0) return null
   return ph as { group1: string; group2: string; mean_diff: number; p_adj: number; reject: boolean }[]
 })
+
+// Post-hoc Bonferroni: statistics.post_hoc_bonferroni
+const postHocBf = computed(() => {
+  const ph = result.value?.statistics?.post_hoc_bonferroni
+  if (Array.isArray(ph)) {
+    return ph.length > 0 ? { _: ph as { group1: string; group2: string; mean_diff: number; p_adj: number; reject: boolean }[] } : null
+  }
+  if (ph && typeof ph === 'object') {
+    const map = ph as Record<string, { group1: string; group2: string; mean_diff: number; p_adj: number; reject: boolean }[]>
+    const entries = Object.entries(map).filter(([, v]) => v.length > 0)
+    return entries.length > 0 ? map : null
+  }
+  return null
+})
+
+// Factorial ANOVA terms
+const factorialTerms = computed(() => {
+  const t = result.value?.statistics?.terms
+  if (!Array.isArray(t) || t.length === 0 || result.value?.test_key !== 'factorial_anova') return null
+  return t as { term: string; f_statistic: number; p_value: number; df: number; eta_sq: number }[]
+})
+
+// Panel regression data
+const panelData = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'panel_regression') return null
+  const s = r.statistics
+  return {
+    modelType: s.model_type as string,
+    bplm: s.bplm as { statistic: number; p_value: number; verdict: string } | null,
+    hausman: s.hausman as { statistic: number; p_value: number; verdict: string; dof: number } | null,
+    selectionSteps: s.selection_steps as { test_name: string; statistic: number | null; p_value: number | null; verdict: string; chosen_model: string; note: string }[],
+    absorbedVars: s.absorbed_vars as string[],
+  }
+})
+
+const MODEL_TYPE_LABEL: Record<string, string> = {
+  fe: 'Fixed Effects', re: 'Random Effects', pooled_ols: 'Pooled OLS',
+}
+const MODEL_TYPE_COLOR: Record<string, string> = {
+  fe: '#7c3aed', re: '#2563eb', pooled_ols: '#6b7280',
+}
 
 function newAnalysis() {
   router.push(session.mode === 'guide' ? '/guide' : '/browse')
@@ -155,7 +219,66 @@ function newAnalysis() {
         </table>
       </div>
 
-      <!-- Post-hoc table -->
+      <!-- Correlation matrix -->
+      <div v-if="corrMatrix" class="section">
+        <h3 class="section-title">Correlation matrix</h3>
+        <div class="tabs">
+          <button
+            v-for="ct in (['pearson', 'spearman', 'kendall'] as const)"
+            :key="ct"
+            class="tab-btn"
+            :class="{ active: corrType === ct }"
+            @click="corrType = ct"
+          >
+            {{ ct.charAt(0).toUpperCase() + ct.slice(1) }}
+          </button>
+        </div>
+        <div class="corr-matrix-wrapper">
+          <table class="corr-matrix">
+            <thead>
+              <tr>
+                <th></th>
+                <th v-for="n in corrMatrix.names" :key="n" class="corr-col-header">{{ n }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in corrMatrix[corrType]" :key="i">
+                <th class="corr-row-header">{{ corrMatrix.names[i] }}</th>
+                <td
+                  v-for="(val, j) in row"
+                  :key="j"
+                  class="corr-cell"
+                  :style="{ background: corrColor(val) }"
+                  :class="{ 'corr-diag': i === j }"
+                >
+                  {{ val.toFixed(2) }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Factorial ANOVA: terms table -->
+      <div v-if="factorialTerms" class="section">
+        <h3 class="section-title">ANOVA summary</h3>
+        <table class="data-table">
+          <thead>
+            <tr><th>Term</th><th>F</th><th>df</th><th>p</th><th>η²</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in factorialTerms" :key="t.term" :class="{ 'sig-row': t.p_value < 0.05 }">
+              <td class="group-name">{{ t.term }}</td>
+              <td>{{ t.f_statistic.toFixed(3) }}</td>
+              <td>{{ t.df }}</td>
+              <td>{{ t.p_value.toFixed(4) }}</td>
+              <td>{{ t.eta_sq.toFixed(4) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Post-hoc table (Tukey) -->
       <div v-if="postHoc" class="section">
         <h3 class="section-title">Post-hoc comparisons (Tukey HSD)</h3>
         <table class="data-table">
@@ -172,6 +295,85 @@ function newAnalysis() {
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Post-hoc table (Bonferroni) -->
+      <div v-if="postHocBf" class="section">
+        <h3 class="section-title">
+          Post-hoc comparisons (Bonferroni)
+          <span v-if="factorialTerms" class="subtitle">per factor</span>
+        </h3>
+        <template v-for="(rows, factor) in postHocBf" :key="factor">
+          <h4 v-if="factor !== '_'" class="factor-heading">{{ factor }}</h4>
+          <table class="data-table" :class="{ 'bf-table': factor !== '_' }">
+            <thead>
+              <tr><th>Group 1</th><th>Group 2</th><th>Mean diff</th><th>p (adj)</th><th>Significant</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in rows" :key="row.group1 + row.group2" :class="{ 'sig-row': row.reject }">
+                <td>{{ row.group1 }}</td>
+                <td>{{ row.group2 }}</td>
+                <td>{{ row.mean_diff.toFixed(4) }}</td>
+                <td>{{ row.p_adj.toFixed(4) }}</td>
+                <td>{{ row.reject ? '✓' : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
+      </div>
+
+      <!-- Panel regression: model badge + test cards -->
+      <div v-if="panelData" class="section">
+        <div class="panel-model-badge" :style="{ background: MODEL_TYPE_COLOR[panelData.modelType] || '#6b7280' }">
+          {{ MODEL_TYPE_LABEL[panelData.modelType] || panelData.modelType }}
+        </div>
+      </div>
+
+      <div v-if="panelData?.bplm" class="section">
+        <h3 class="section-title">Breusch-Pagan LM test</h3>
+        <div class="panel-test-card">
+          <div class="panel-test-row"><span class="panel-test-label">Statistic</span><span>{{ panelData.bplm.statistic }}</span></div>
+          <div class="panel-test-row"><span class="panel-test-label">p-value</span><span>{{ panelData.bplm.p_value }}</span></div>
+          <div class="panel-test-row"><span class="panel-test-label">Verdict</span><span>{{ panelData.bplm.verdict }}</span></div>
+        </div>
+      </div>
+
+      <div v-if="panelData?.hausman" class="section">
+        <h3 class="section-title">Hausman test</h3>
+        <div class="panel-test-card">
+          <div class="panel-test-row"><span class="panel-test-label">Statistic</span><span>{{ panelData.hausman.statistic }}</span></div>
+          <div class="panel-test-row"><span class="panel-test-label">p-value</span><span>{{ panelData.hausman.p_value }}</span></div>
+          <div class="panel-test-row"><span class="panel-test-label">df</span><span>{{ panelData.hausman.dof }}</span></div>
+          <div class="panel-test-row"><span class="panel-test-label">Verdict</span><span>{{ panelData.hausman.verdict }}</span></div>
+        </div>
+      </div>
+
+      <div v-if="panelData?.selectionSteps?.length" class="section">
+        <h3 class="section-title">Model selection</h3>
+        <ol class="panel-timeline">
+          <li v-for="(step, i) in panelData.selectionSteps" :key="i" class="panel-timeline-step">
+            <div class="panel-step-header">
+              <span class="panel-step-name">{{ step.test_name }}</span>
+              <span class="panel-step-verdict">{{ step.verdict }}</span>
+            </div>
+            <div v-if="step.statistic != null" class="panel-step-detail">
+              χ²({{ step.note === 'BP-LM test' ? '?' : step.note }}) = {{ step.statistic }}, p = {{ step.p_value }}
+            </div>
+            <div class="panel-step-outcome">
+              <span class="model-pill" :class="'model-' + step.chosen_model">
+                {{ {fe: 'FE', re: 'RE', pooled_ols: 'Pooled'}[step.chosen_model] || step.chosen_model }}
+              </span>
+              chosen
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <div v-if="panelData?.absorbedVars?.length" class="section">
+        <h3 class="section-title">Absorbed variables</h3>
+        <p class="panel-absorbed-note">
+          {{ panelData.absorbedVars.join(', ') }} — dropped due to time-invariance in FE estimation.
+        </p>
       </div>
 
       <!-- Effect size -->
@@ -284,6 +486,9 @@ function newAnalysis() {
 .data-table tr:last-child td { border-bottom: none; }
 .data-table .group-name { font-weight: 600; }
 .sig-row td { background: #f0fdf4; }
+.factor-heading { font-size: 13px; font-weight: 600; margin: 8px 0 4px; color: var(--color-primary); }
+.bf-table { margin-bottom: 8px; }
+.subtitle { font-size: 12px; font-weight: 400; color: var(--color-text-muted); margin-left: 6px; }
 
 /* Effect size */
 .effect-size-section { font-size: 14px; }
@@ -312,6 +517,14 @@ function newAnalysis() {
 .apa-text { font-style: italic; }
 .mono-text { font-family: ui-monospace, monospace; font-size: 13px; }
 
+/* Correlation matrix */
+.corr-matrix-wrapper { overflow-x: auto; }
+.corr-matrix { border-collapse: collapse; font-size: 13px; }
+.corr-matrix th, .corr-matrix td { padding: 6px 10px; text-align: center; min-width: 70px; }
+.corr-col-header, .corr-row-header { font-weight: 600; color: var(--color-text-muted); font-size: 12px; }
+.corr-cell { border-radius: 0; font-variant-numeric: tabular-nums; }
+.corr-diag { font-weight: 700; background: transparent !important; }
+
 /* Warnings */
 .warnings-section { display: flex; flex-direction: column; gap: 6px; }
 .warning-item { font-size: 12px; color: var(--color-amber); background: var(--color-amber-bg); padding: 6px 10px; border-radius: 6px; }
@@ -328,4 +541,60 @@ function newAnalysis() {
 }
 .no-result-primary { font-size: 16px; font-weight: 600; color: var(--color-text); margin: 0; }
 .no-result-secondary { font-size: 13px; color: var(--color-text-muted); margin: 0; }
+
+/* Panel regression */
+.panel-model-badge {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  letter-spacing: 0.02em;
+}
+.panel-test-card {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.panel-test-row { display: flex; justify-content: space-between; }
+.panel-test-label { color: var(--color-text-muted); font-weight: 600; }
+.panel-timeline { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0; }
+.panel-timeline-step {
+  position: relative;
+  padding: 12px 16px 12px 32px;
+  border-left: 2px solid var(--color-border);
+}
+.panel-timeline-step:first-child { padding-top: 0; }
+.panel-timeline-step:last-child { border-left-color: transparent; }
+.panel-timeline-step::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: 16px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+.panel-step-header { display: flex; justify-content: space-between; align-items: center; }
+.panel-step-name { font-weight: 600; font-size: 13px; }
+.panel-step-verdict { font-size: 12px; color: var(--color-text-muted); font-style: italic; }
+.panel-step-detail { font-size: 12px; color: var(--color-text-muted); margin-top: 2px; }
+.panel-step-outcome { font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+.model-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.model-fe { background: #7c3aed; }
+.model-re { background: #2563eb; }
+.model-pooled_ols { background: #6b7280; }
+.panel-absorbed-note { font-size: 13px; color: var(--color-text-muted); }
 </style>
