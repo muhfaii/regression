@@ -51,6 +51,15 @@ const descriptiveVars = computed(() => {
   return result.value.statistics.variables as Record<string, Record<string, number>>
 })
 
+// Reliability: item-total statistics
+const reliabilityItems = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'reliability') return null
+  const items = r.statistics?.item_statistics as { item: string; corrected_item_total_corr: number; alpha_if_deleted: number | null }[] | undefined
+  if (!items || !items.length) return null
+  return items
+})
+
 // Group summaries: statistics.groups (ANOVA, Mann-Whitney, Kruskal-Wallis)
 const groupStats = computed(() => {
   const g = result.value?.statistics?.groups
@@ -248,6 +257,27 @@ function newAnalysis() {
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Reliability: item-total statistics -->
+      <div v-if="reliabilityItems" class="section">
+        <h3 class="section-title">Item-total statistics</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Corrected item-total correlation</th>
+              <th>Alpha if deleted</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in reliabilityItems" :key="item.item">
+              <td class="group-name">{{ item.item }}</td>
+              <td>{{ item.corrected_item_total_corr.toFixed(4) }}</td>
+              <td>{{ item.alpha_if_deleted != null ? item.alpha_if_deleted.toFixed(4) : '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Group summary table (ANOVA, Mann-Whitney, Kruskal-Wallis) -->

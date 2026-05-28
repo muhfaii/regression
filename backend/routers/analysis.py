@@ -13,7 +13,9 @@ from backend.analysis_modules import (
     moderation,
     nonparametric,
     panel,
+    power_analysis,
     regression,
+    reliability,
     t_tests,
 )
 from backend.schemas.analysis import RunRequest, ValidateConfigRequest
@@ -52,6 +54,8 @@ _RUNNERS = {
     "logistic_regression": logistic.run,
     "moderation": moderation.run,
     "mediation": mediation.run,
+    "reliability": reliability.run,
+    "power_analysis": power_analysis.run,
 }
 
 # Slot type requirements — mirrors TEST_CATALOG in frontend/src/constants/tests.ts
@@ -71,6 +75,7 @@ _SLOT_TYPES: dict[str, dict[str, str]] = {
     "logistic_regression": {"outcome": "categorical", "predictors": "any"},
     "moderation": {"outcome": "continuous", "predictor": "any", "moderator": "any", "covariates": "any"},
     "mediation": {"outcome": "continuous", "predictor": "any", "mediator": "any", "covariates": "any"},
+    "reliability": {"variables": "any"},
 }
 
 

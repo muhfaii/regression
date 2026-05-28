@@ -14,6 +14,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
     post_hoc: false,
     se_type: 'auto',
     p_adjust: 'none',
+    extras: {} as Record<string, any>,
   })
 
   const selectedTest = computed(() => selectedTestKey.value ? getTest(selectedTestKey.value) : null)

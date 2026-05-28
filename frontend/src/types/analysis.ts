@@ -1,5 +1,15 @@
 export type SessionMode = 'guide' | 'browse'
 
+export type TestType = 'column_assignment' | 'parameter_input'
+
+export interface ParameterField {
+  key: string
+  label: string
+  type: 'number' | 'select' | 'boolean'
+  options?: string[]
+  default?: number | string | boolean
+}
+
 export interface VariableSlot {
   key: string
   label: string
@@ -14,6 +24,8 @@ export interface TestDefinition {
   descriptor: string   // ≤5 words
   tooltip: string      // one sentence
   slots: VariableSlot[]
+  type?: TestType
+  parameters?: ParameterField[]
   coming_soon?: boolean
 }
 
@@ -31,5 +43,6 @@ export interface RunRequest {
     post_hoc: boolean
     se_type: string
     p_adjust: string
+    extras?: Record<string, any>
   }
 }

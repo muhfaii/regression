@@ -21,6 +21,12 @@ const conflicts = ref<{ slot: string; column: string; required_type: string; act
 
 const test = computed(() => analysis.selectedTest)
 const columns = computed(() => dataset.columns)
+const isParamInput = computed(() => test.value?.type === 'parameter_input')
+
+function updateExtra(key: string, value: string | number) {
+  const num = typeof value === 'string' && value !== '' && !isNaN(Number(value)) ? Number(value) : value
+  analysis.options.extras = { ...analysis.options.extras, [key]: num }
+}
 
 function effectiveType(colName: string): ColumnType {
   return dataset.effectiveColumnType(colName)
@@ -75,7 +81,16 @@ watch(() => analysis.config, triggerValidation, { deep: true })
 watch(() => analysis.selectedTestKey, () => { conflicts.value = []; triggerValidation() })
 watch(() => dataset.columnTypeOverrides, triggerValidation, { deep: true })
 
-const canRun = computed(() => analysis.requiredSlotsFilled && conflicts.value.length === 0)
+const canRun = computed(() => {
+  if (isParamInput.value) {
+    const params = test.value?.parameters ?? []
+    return params.every(p => {
+      const val = analysis.options.extras[p.key]
+      return val !== undefined && val !== '' && val !== null
+    })
+  }
+  return analysis.requiredSlotsFilled && conflicts.value.length === 0
+})
 
 async function runAnalysis() {
   if (!session.sessionId || !test.value) return
@@ -105,7 +120,33 @@ async function runAnalysis() {
     <h2 class="test-title">{{ test.name }}</h2>
     <p class="test-tooltip">{{ test.tooltip }}</p>
 
-    <div class="slots">
+    <!-- Parameter inputs (for parameter_input type tests like Power Analysis) -->
+    <div v-if="isParamInput" class="params">
+      <div v-for="param in test.parameters ?? []" :key="param.key" class="param-field">
+        <label class="param-label">{{ param.label }}</label>
+        <select
+          v-if="param.type === 'select'"
+          class="param-select"
+          :value="analysis.options.extras[param.key] ?? param.default ?? ''"
+          @change="updateExtra(param.key, ($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">— select —</option>
+          <option v-for="opt in param.options ?? []" :key="opt" :value="opt">{{ opt }}</option>
+        </select>
+        <input
+          v-else
+          type="number"
+          class="param-input"
+          :value="analysis.options.extras[param.key] ?? param.default ?? ''"
+          :placeholder="param.label"
+          step="any"
+          @input="updateExtra(param.key, parseFloat(($event.target as HTMLInputElement).value) || ($event.target as HTMLInputElement).value)"
+        />
+      </div>
+    </div>
+
+    <!-- Column slot selectors (for column_assignment tests) -->
+    <div v-if="!isParamInput" class="slots">
       <div v-for="slot in test.slots" :key="slot.key" class="slot">
         <label class="slot-label">
           {{ slot.label }}
@@ -142,7 +183,7 @@ async function runAnalysis() {
       </div>
     </div>
 
-    <TypeConflictBanner :conflicts="conflicts" @type-change="triggerValidation" />
+    <TypeConflictBanner v-if="!isParamInput" :conflicts="conflicts" @type-change="triggerValidation" />
 
     <!-- Options -->
     <div class="options">
@@ -192,10 +233,13 @@ async function runAnalysis() {
       <span v-else>Run analysis</span>
     </button>
 
-    <p v-if="!analysis.requiredSlotsFilled" class="validation-msg">
+    <p v-if="isParamInput && !canRun" class="validation-msg">
+      Fill in all parameter fields to run.
+    </p>
+    <p v-else-if="!isParamInput && !analysis.requiredSlotsFilled" class="validation-msg">
       Select all required variables to run.
     </p>
-    <p v-else-if="conflicts.length" class="validation-msg conflict-msg">
+    <p v-else-if="!isParamInput && conflicts.length" class="validation-msg conflict-msg">
       Resolve type conflicts above before running.
     </p>
   </div>
@@ -269,4 +313,17 @@ async function runAnalysis() {
   padding: 10px 14px;
   font-size: 13px;
 }
+.params { display: flex; flex-direction: column; gap: 14px; }
+.param-field { display: flex; flex-direction: column; gap: 4px; }
+.param-label { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.param-select, .param-input {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: var(--color-bg);
+  width: 100%;
+  height: 36px;
+}
+.param-select:focus, .param-input:focus { outline: 2px solid var(--color-primary); }
 </style>

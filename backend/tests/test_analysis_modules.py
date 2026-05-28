@@ -13,7 +13,9 @@ from backend.analysis_modules import (
     multicomp,
     nonparametric,
     panel,
+    power_analysis,
     regression,
+    reliability,
     t_tests,
 )
 from backend.schemas.analysis import AnalysisOptions
@@ -377,6 +379,179 @@ def test_moderation_missing_moderator(continuous_df):
 
 
 # ---------------------------------------------------------------------------
+# Reliability analysis
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def likert_df():
+    """Simulated 6-item Likert scale (1-7) with good internal consistency."""
+    rng = np.random.default_rng(42)
+    true_score = rng.normal(4, 0.8, 50)
+    items = {}
+    for i in range(6):
+        items[f"item_{i+1}"] = np.clip(true_score + rng.normal(0, 0.5, 50), 1, 7).tolist()
+    return pd.DataFrame(items)
+
+
+def test_reliability_smoke(likert_df):
+    result = reliability.run(likert_df, {"variables": list(likert_df.columns)}, OPTS)
+    assert result.test_key == "reliability"
+    assert 0 <= result.statistics["alpha"] <= 1
+    assert result.statistics["n_items"] == 6
+    assert result.statistics["n_obs"] == 50
+    assert len(result.statistics["item_statistics"]) == 6
+    for item in result.statistics["item_statistics"]:
+        assert "corrected_item_total_corr" in item
+        assert "alpha_if_deleted" in item
+        assert isinstance(item["corrected_item_total_corr"], float)
+    assert "inter_item_corr_mean" in result.statistics
+
+
+def test_reliability_high_consistency(likert_df):
+    """With small error variance, alpha should be high (>0.80)."""
+    result = reliability.run(likert_df, {"variables": list(likert_df.columns)}, OPTS)
+    assert result.statistics["alpha"] > 0.80
+
+
+def test_reliability_too_few_items():
+    with pytest.raises(ValueError, match="At least two"):
+        reliability.run(pd.DataFrame({"a": [1, 2, 3]}), {"variables": ["a"]}, OPTS)
+
+
+def test_reliability_assumption_checks(likert_df):
+    result = reliability.run(likert_df, {"variables": list(likert_df.columns)}, OPTS)
+    assert isinstance(result.assumption_checks, list)
+
+
+def test_reliability_no_assumption_checks(likert_df):
+    result = reliability.run(likert_df, {"variables": list(likert_df.columns)}, NO_OPTS)
+    assert len(result.assumption_checks) == 0
+
+
+# ---------------------------------------------------------------------------
+# Power analysis
+# ---------------------------------------------------------------------------
+
+class _PowerOpts:
+    assumption_checks = False
+    effect_size = False
+    post_hoc = False
+    extras = {}
+
+
+def test_power_known_t_test():
+    """N=128 (64 per group) for independent t, d=0.5, α=0.05, power=0.80."""
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Independent t-test",
+        "compute": "Sample size (N)",
+        "effect_size": 0.5,
+        "alpha": 0.05,
+        "power": 0.80,
+    }
+    result = power_analysis.run(pd.DataFrame(), {}, opts)
+    assert result.statistics["n_total"] == 128
+    assert result.statistics["n_per_group"] == 64
+
+
+def test_power_paired_t():
+    """N=34 for paired t, d=0.5, α=0.05, power=0.80."""
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Paired t-test",
+        "compute": "Sample size (N)",
+        "effect_size": 0.5,
+        "alpha": 0.05,
+        "power": 0.80,
+    }
+    result = power_analysis.run(pd.DataFrame(), {}, opts)
+    assert 30 <= result.statistics["n_total"] <= 40
+
+
+def test_power_power_computation():
+    """Power for known values: d=0.5, N=64, α=0.05, independent t."""
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Independent t-test",
+        "compute": "Power (1-β)",
+        "effect_size": 0.5,
+        "alpha": 0.05,
+        "n_total": 64,
+    }
+    result = power_analysis.run(pd.DataFrame(), {}, opts)
+    assert 0.45 <= result.statistics["power"] <= 0.75  # 64 for d=0.5 gives ~0.50-0.56
+
+
+def test_power_effect_size_computation():
+    """Detectable effect size for N=128, α=0.05, power=0.80, independent t."""
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Independent t-test",
+        "compute": "Detectable effect size",
+        "alpha": 0.05,
+        "power": 0.80,
+        "n_total": 128,
+    }
+    result = power_analysis.run(pd.DataFrame(), {}, opts)
+    assert 0.45 <= result.statistics["effect_size"] <= 0.55  # should be ~0.50
+
+
+def test_power_unknown_family():
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Unknown",
+        "compute": "Sample size (N)",
+        "effect_size": 0.5,
+        "alpha": 0.05,
+        "power": 0.80,
+    }
+    with pytest.raises(ValueError, match="Unknown test family"):
+        power_analysis.run(pd.DataFrame(), {}, opts)
+
+
+def test_power_missing_effect_size():
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Independent t-test",
+        "compute": "Sample size (N)",
+        "alpha": 0.05,
+        "power": 0.80,
+    }
+    with pytest.raises(ValueError, match="effect_size is required"):
+        power_analysis.run(pd.DataFrame(), {}, opts)
+
+
+def test_power_anova():
+    """N ~158 for ANOVA with 3 groups, f=0.25, α=0.05, power=0.80."""
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "ANOVA (F-test)",
+        "compute": "Sample size (N)",
+        "effect_size": 0.25,
+        "alpha": 0.05,
+        "power": 0.80,
+        "n_groups": 3,
+    }
+    result = power_analysis.run(pd.DataFrame(), {}, opts)
+    assert 150 <= result.statistics["n_total"] <= 170
+    assert result.statistics["n_groups"] == 3
+
+
+def test_power_correlation():
+    """N ~29 for r=0.5, α=0.05, power=0.80."""
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Correlation (Pearson r)",
+        "compute": "Sample size (N)",
+        "effect_size": 0.5,
+        "alpha": 0.05,
+        "power": 0.80,
+    }
+    result = power_analysis.run(pd.DataFrame(), {}, opts)
+    assert 25 <= result.statistics["n_total"] <= 35
+
+
+# ---------------------------------------------------------------------------
 # Multiple comparison corrections
 # ---------------------------------------------------------------------------
 
@@ -479,12 +654,30 @@ def test_regression_no_p_adjust(continuous_df):
     (lambda df: anova.run_factorial(df, {"outcome": "score", "factors": ["group", "group2"]}, OPTS), "continuous_df"),
     (lambda df: panel.run(df, {"dep_var": "y", "indep_vars": ["x1", "x2"], "entity_col": "entity_id", "time_col": "year"}, OPTS), "panel_df"),
     (lambda df: moderation.run(df, {"outcome": "score", "predictor": "pre", "moderator": "post"}, OPTS), "continuous_df"),
+    (lambda df: reliability.run(df, {"variables": list(df.columns)}, OPTS), "likert_df"),
 ])
-def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df):
-    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df}
+
+def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df, likert_df):
+    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df, "likert_df": likert_df}
     df = m[args]
     result = result_fn(df)
     assert result.interpretation.plain
     assert result.interpretation.apa
     assert result.interpretation.technical
     assert result.result_id  # UUID populated
+
+
+def test_power_interpretation_fields():
+    opts = _PowerOpts()
+    opts.extras = {
+        "test_family": "Independent t-test",
+        "compute": "Sample size (N)",
+        "effect_size": 0.5,
+        "alpha": 0.05,
+        "power": 0.80,
+    }
+    result = power_analysis.run(pd.DataFrame(), {}, opts)
+    assert result.interpretation.plain
+    assert result.interpretation.apa
+    assert result.interpretation.technical
+    assert result.result_id

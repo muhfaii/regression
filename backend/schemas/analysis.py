@@ -9,6 +9,7 @@ class AnalysisOptions(BaseModel):
     post_hoc: bool = False
     se_type: str = "auto"
     p_adjust: str = "none"
+    extras: dict = {}
 
 
 class RunRequest(BaseModel):

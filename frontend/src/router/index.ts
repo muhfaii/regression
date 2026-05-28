@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useDatasetStore } from '../stores/dataset'
+import { useAnalysisStore } from '../stores/analysis'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -15,12 +16,18 @@ const router = createRouter({
   ],
 })
 
-// Guard: screens beyond /data require a loaded dataset
+// Guard: screens beyond /data require a loaded dataset (except parameter_input tests)
 const GUARDED = ['/home', '/guide', '/browse', '/configure', '/results']
 
 router.beforeEach((to) => {
   if (GUARDED.includes(to.path)) {
     const dataset = useDatasetStore()
+    const analysis = useAnalysisStore()
+    if (to.path === '/configure' || to.path === '/browse') {
+      if (analysis.selectedTest?.type === 'parameter_input') {
+        return
+      }
+    }
     if (!dataset.isLoaded) {
       return { path: '/data', query: { message: 'no_data' } }
     }

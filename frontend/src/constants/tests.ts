@@ -176,6 +176,38 @@ export const TEST_CATALOG: TestDefinition[] = [
     ],
   },
 
+    // ── Tools ────────────────────────────────────────────────────────────────────
+  {
+    key: 'power_analysis',
+    name: 'Power Analysis',
+    category: 'Tools',
+    descriptor: 'sample size calculator',
+    tooltip: 'Compute required sample size, statistical power, or detectable effect size for common tests.',
+    type: 'parameter_input',
+    slots: [],
+    parameters: [
+      { key: 'test_family', label: 'Test family', type: 'select', options: ['Independent t-test', 'Paired t-test', 'One-sample t-test', 'ANOVA (F-test)', 'Correlation (Pearson r)'] },
+      { key: 'compute', label: 'What to compute', type: 'select', options: ['Sample size (N)', 'Power (1-β)', 'Detectable effect size'] },
+      { key: 'effect_size', label: 'Effect size (d / f / r)', type: 'number', default: 0.5 },
+      { key: 'alpha', label: 'Significance level (α)', type: 'number', default: 0.05 },
+      { key: 'power', label: 'Desired power (1-β)', type: 'number', default: 0.80 },
+      { key: 'n_total', label: 'Total sample size (N)', type: 'number' },
+      { key: 'n_groups', label: 'Number of groups (for ANOVA)', type: 'number', default: 3 },
+    ],
+  },
+
+  // ── Psychometrics ────────────────────────────────────────────────────────────
+  {
+    key: 'reliability',
+    name: 'Reliability Analysis',
+    category: 'Psychometrics',
+    descriptor: 'Cronbach\'s alpha',
+    tooltip: 'Assesses internal consistency of scale items using Cronbach\'s alpha and item-total statistics.',
+    slots: [
+      { key: 'variables', label: 'Scale items', required_type: 'continuous', multiple: true },
+    ],
+  },
+
   // ── Advanced (coming soon) ─────────────────────────────────────────────────
   {
     key: 'mixed_anova',

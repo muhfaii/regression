@@ -28,8 +28,9 @@ export const ROUTING_TABLE: RoutingEntry[] = [
   { answers: ['compare', 'paired', 'continuous', 'yes'], test_key: 'paired_t', reason: 'You are comparing paired measurements and your data is normally distributed.' },
   { answers: ['compare', 'paired', 'continuous', 'no'], test_key: 'wilcoxon', reason: 'You are comparing paired measurements but your data is not normally distributed.' },
   { answers: ['compare', 'paired', 'continuous', null], test_key: 'paired_t', reason: 'You are comparing paired measurements on a continuous outcome.' },
-  // Describe → descriptive statistics
+  // Describe → descriptive statistics (or reliability if scale items suggested)
   { answers: ['describe', null, null, null], test_key: 'descriptive', reason: 'You want to summarise your data — descriptive statistics will give you means, variability, and distribution shape.' },
+  // Reliability is browse-only (too domain-specific for Guide Me)
   // Relate + continuous → correlation
   { answers: ['relate', null, 'continuous', null], test_key: 'correlation', reason: 'You want to measure the relationship between two continuous variables.' },
   { answers: ['relate', null, 'categorical', null], test_key: 'chi_square', reason: 'You want to test the association between two categorical variables.' },
