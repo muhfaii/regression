@@ -111,18 +111,14 @@ def run(df: pd.DataFrame, config: dict, options=None) -> AnalysisResult:
     # ── Proportion mediated ───────────────────────────────────────────────────
     proportion_mediated = indirect / c_coef if abs(c_coef) > 1e-12 else float("inf")
 
-    # ── Mediation type ────────────────────────────────────────────────────────
-    a_sig = a_p < 0.05
-    b_sig = b_p < 0.05
-    cp_sig = cp_p < 0.05
-    if a_sig and b_sig and not cp_sig:
-        mediation_type = "full"
-    elif a_sig and b_sig and cp_sig:
-        mediation_type = "partial"
-    elif indirect != 0 and (boot_ci_low > 0 or boot_ci_high < 0):
-        mediation_type = "partial"
-    else:
+    # ── Mediation type (bootstrap CI as primary test) ─────────────────────────
+    ci_excludes_zero = boot_ci_low > 0 or boot_ci_high < 0
+    if not ci_excludes_zero:
         mediation_type = "none"
+    elif cp_p >= 0.05:
+        mediation_type = "full"
+    else:
+        mediation_type = "partial"
 
     # ── Coefficient tables for all models ─────────────────────────────────────
     def _coef_table(model) -> dict:
