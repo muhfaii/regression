@@ -9,6 +9,7 @@ from regassist.ingest import IngestResult, ColumnInfo as IngestColumnInfo
 from regassist.pipeline import run_panel_pipeline
 
 from .base import AnalysisResult, AssumptionCheck, EffectSize, Interpretation
+from .regression import _compute_desc_stats, _extract_vif_table, _extract_remediation
 
 _VERDICT_MAP = {"pass": "pass", "borderline": "amber", "fail": "fail"}
 
@@ -60,14 +61,20 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
     coef_table = {}
     for var in indep_vars:
         if var in model.params.index:
+            p_val = float(model.pvalues[var])
             coef_table[var] = {
                 "coef": round(float(model.params[var]), 4),
                 "se": round(float(model.bse[var]), 4),
                 "t": round(float(model.tvalues[var]), 4),
-                "p": round(float(model.pvalues[var]), 4),
+                "p": round(float(p_val), 4),
                 "ci_low": round(float(ci.loc[var, "lower_95"]), 4),
                 "ci_high": round(float(ci.loc[var, "upper_95"]), 4),
+                "significant": p_val < 0.05,
             }
+
+    desc_stats = _compute_desc_stats(df, dep_var, indep_vars)
+    vif_table = _extract_vif_table(diags)
+    remediation = _extract_remediation(result.remediation)
 
     stats = {
         "model_type": model_type,
@@ -79,9 +86,14 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         "coefficients": coef_table,
         "intercept": round(float(model.params.get("const", float("nan"))), 4),
         "se_type": model.se_variant or "classical",
+        "se_justification": model.se_justification,
+        "se_citation": model.se_citation,
         "entity_col": entity_col,
         "time_col": time_col,
         "absorbed_vars": model.absorbed_vars or [],
+        "desc_stats": desc_stats,
+        "vif_table": vif_table,
+        "remediation": remediation,
         "bplm": _bplm_to_dict(result.bplm),
         "hausman": _hausman_to_dict(result.hausman),
         "selection_steps": [

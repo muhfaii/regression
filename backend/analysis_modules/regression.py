@@ -46,14 +46,25 @@ def run_ols(
     coef_table = {}
     for var in indep_vars:
         if var in model.params.index:
+            p_val = float(model.pvalues[var])
             coef_table[var] = {
                 "coef": round(float(model.params[var]), 4),
                 "se": round(float(model.bse[var]), 4),
                 "t": round(float(model.tvalues[var]), 4),
-                "p": round(float(model.pvalues[var]), 4),
+                "p": round(float(p_val), 4),
                 "ci_low": round(float(ci.loc[var, "lower_95"]), 4),
                 "ci_high": round(float(ci.loc[var, "upper_95"]), 4),
+                "significant": p_val < 0.05,
             }
+
+    # Descriptive stats for model variables
+    desc_stats = _compute_desc_stats(df, dep_var, indep_vars)
+
+    # VIF per-variable table from diagnostics
+    vif_table = _extract_vif_table(diags)
+
+    # Remediation data (cross-patterns + per-test remedies)
+    remediation = _extract_remediation(result.remediation)
 
     stats = {
         "r_squared": round(float(model.rsquared), 4),
@@ -64,6 +75,11 @@ def run_ols(
         "coefficients": coef_table,
         "intercept": round(float(model.params.get("const", float("nan"))), 4),
         "se_type": model.se_variant or "classical",
+        "se_justification": model.se_justification,
+        "se_citation": model.se_citation,
+        "desc_stats": desc_stats,
+        "vif_table": vif_table,
+        "remediation": remediation,
     }
 
     p_adjust_method = getattr(options, "p_adjust", "none") if options else "none"
@@ -153,3 +169,68 @@ def _build_interpretation(dep_var: str, indep_vars: list[str], stats: dict) -> I
     )
 
     return Interpretation(plain=plain, apa=apa, technical=technical)
+
+
+def _compute_desc_stats(
+    df: pd.DataFrame,
+    dep_var: str,
+    indep_vars: list[str],
+) -> list[dict]:
+    cols = [dep_var] + list(indep_vars)
+    stats = []
+    for col in cols:
+        if col not in df.columns:
+            continue
+        s = df[col].dropna()
+        stats.append({
+            "variable": col,
+            "mean": round(float(s.mean()), 4),
+            "std": round(float(s.std()), 4),
+            "min": round(float(s.min()), 4),
+            "median": round(float(s.median()), 4),
+            "max": round(float(s.max()), 4),
+            "missing": int(df[col].isnull().sum()),
+        })
+    return stats
+
+
+def _extract_vif_table(diags: list) -> list[dict] | None:
+    for d in diags:
+        if d.test_id == "vif" and hasattr(d, "details") and d.details.get("per_variable"):
+            return d.details["per_variable"]
+    return None
+
+
+def _extract_remediation(remediation) -> dict | None:
+    if not remediation or not remediation.has_issues:
+        return None
+    return {
+        "patterns": [
+            {
+                "id": p.id,
+                "severity": p.severity,
+                "interpretation": p.interpretation,
+                "recommendation": p.recommendation,
+                "triggered_by": p.triggered_by,
+            }
+            for p in remediation.patterns
+        ],
+        "per_test": [
+            {
+                "test_id": t.test_id,
+                "test_name": t.test_name,
+                "verdict": t.verdict,
+                "remedies": [
+                    {
+                        "priority": r.priority,
+                        "kind": r.kind,
+                        "description": r.description,
+                        "why": r.why,
+                    }
+                    for r in t.remedies
+                ],
+                "honest_caveat": t.honest_caveat,
+            }
+            for t in remediation.per_test
+        ],
+    }
