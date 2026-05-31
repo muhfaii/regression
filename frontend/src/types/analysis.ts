@@ -8,6 +8,7 @@ export interface ParameterField {
   type: 'number' | 'select' | 'boolean'
   options?: string[]
   default?: number | string | boolean
+  depends_on?: { parameter: string; values: (string | number | boolean)[] }
 }
 
 export interface VariableSlot {
@@ -26,6 +27,7 @@ export interface TestDefinition {
   slots: VariableSlot[]
   type?: TestType
   parameters?: ParameterField[]
+  extras_fields?: ParameterField[]
   coming_soon?: boolean
 }
 

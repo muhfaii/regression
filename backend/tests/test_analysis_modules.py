@@ -16,6 +16,7 @@ from backend.analysis_modules import (
     power_analysis,
     regression,
     reliability,
+    timeseries,
     t_tests,
 )
 from backend.schemas.analysis import AnalysisOptions
@@ -552,6 +553,122 @@ def test_power_correlation():
 
 
 # ---------------------------------------------------------------------------
+# Time-series analysis
+# ---------------------------------------------------------------------------
+
+class _TsOpts:
+    assumption_checks = True
+    effect_size = False
+    post_hoc = False
+    extras = {}
+
+@pytest.fixture
+def ts_stationary():
+    """White noise — should be stationary."""
+    rng = np.random.default_rng(42)
+    return pd.DataFrame({
+        "date": pd.date_range("2020-01-01", periods=100, freq="D"),
+        "value": rng.normal(0, 1, 100).tolist(),
+    })
+
+@pytest.fixture
+def ts_nonstationary():
+    """Random walk — should be non-stationary."""
+    rng = np.random.default_rng(42)
+    steps = rng.normal(0, 1, 100)
+    walk = np.cumsum(steps)
+    return pd.DataFrame({
+        "date": pd.date_range("2020-01-01", periods=100, freq="D"),
+        "value": walk.tolist(),
+    })
+
+@pytest.fixture
+def ts_seasonal():
+    """Seasonal series with clear period 12 pattern."""
+    rng = np.random.default_rng(42)
+    t = np.arange(60)
+    seasonal = 2 * np.sin(2 * np.pi * t / 12)
+    noise = rng.normal(0, 0.5, 60)
+    return pd.DataFrame({
+        "date": pd.date_range("2020-01-01", periods=60, freq="ME"),
+        "value": (seasonal + noise).tolist(),
+    })
+
+def test_timeseries_adf_stationary(ts_stationary):
+    """White noise should be identified as stationary."""
+    result = timeseries.run(ts_stationary, {"value": "value", "time_col": "date"}, _TsOpts())
+    assert result.test_key == "timeseries"
+    assert result.statistics["is_stationary"] is True
+    assert result.statistics["adf_pvalue"] < 0.05
+    assert "adf_statistic" in result.statistics
+    assert "kpss_statistic" in result.statistics
+
+def test_timeseries_adf_nonstationary(ts_nonstationary):
+    """Random walk should be identified as non-stationary."""
+    result = timeseries.run(ts_nonstationary, {"value": "value", "time_col": "date"}, _TsOpts())
+    assert result.test_key == "timeseries"
+    assert result.statistics["is_stationary"] is False
+    assert result.statistics["adf_pvalue"] > 0.05
+
+def test_timeseries_missing_config(ts_stationary):
+    with pytest.raises(ValueError, match="required"):
+        timeseries.run(ts_stationary, {"value": "value"}, _TsOpts())
+    with pytest.raises(ValueError, match="required"):
+        timeseries.run(ts_stationary, {"time_col": "date"}, _TsOpts())
+
+def test_timeseries_too_few_obs():
+    df = pd.DataFrame({"date": [1, 2, 3], "value": [1, 2, 3]})
+    with pytest.raises(ValueError, match="At least 10"):
+        timeseries.run(df, {"value": "value", "time_col": "date"}, _TsOpts())
+
+def test_timeseries_arima_manual(ts_stationary):
+    """Manual ARIMA(1,0,0) should produce forecast."""
+    opts = _TsOpts()
+    opts.extras = {"order": "Manual", "p": 1, "d": 0, "q": 0, "forecast_steps": 5}
+    result = timeseries.run(ts_stationary, {"value": "value", "time_col": "date"}, opts)
+    assert "arima_order" in result.statistics
+    assert result.statistics["arima_order"] == [1, 0, 0]
+    assert len(result.statistics.get("forecast_values", [])) == 5
+
+def test_timeseries_arima_auto(ts_stationary):
+    """Auto ARIMA should find a model and produce forecast."""
+    opts = _TsOpts()
+    opts.extras = {"order": "Auto (AIC)", "forecast_steps": 5}
+    result = timeseries.run(ts_stationary, {"value": "value", "time_col": "date"}, opts)
+    assert "arima_order" in result.statistics
+    assert len(result.statistics.get("forecast_values", [])) == 5
+
+def test_timeseries_seasonal_detection(ts_seasonal):
+    """Seasonal data with period=12 should detect seasonality."""
+    opts = _TsOpts()
+    opts.extras = {"order": "Auto (AIC)", "seasonal": True, "s": 12, "forecast_steps": 6}
+    result = timeseries.run(ts_seasonal, {"value": "value", "time_col": "date"}, opts)
+    assert result.statistics["is_seasonal"] is True
+    assert result.statistics["seasonal_period"] == 12
+
+def test_timeseries_assumption_checks(ts_stationary):
+    result = timeseries.run(ts_stationary, {"value": "value", "time_col": "date"}, _TsOpts())
+    assert len(result.assumption_checks) > 0
+    assert any("Stationarity" in c.name for c in result.assumption_checks)
+
+def test_timeseries_no_assumptions(ts_stationary):
+    class _NoCheckOpts:
+        assumption_checks = False
+        effect_size = False
+        post_hoc = False
+    result = timeseries.run(ts_stationary, {"value": "value", "time_col": "date"}, _NoCheckOpts())
+    assert len(result.assumption_checks) == 0
+
+def test_timeseries_acf_pacf(ts_stationary):
+    result = timeseries.run(ts_stationary, {"value": "value", "time_col": "date"}, _TsOpts())
+    assert len(result.statistics.get("acf_values", [])) > 1
+    assert len(result.statistics.get("pacf_values", [])) > 1
+    # Lag 0 ACF should be 1.0
+    assert result.statistics["acf_values"][0]["lag"] == 0
+    assert abs(result.statistics["acf_values"][0]["value"] - 1.0) < 1e-6
+
+
+# ---------------------------------------------------------------------------
 # Multiple comparison corrections
 # ---------------------------------------------------------------------------
 
@@ -655,10 +772,11 @@ def test_regression_no_p_adjust(continuous_df):
     (lambda df: panel.run(df, {"dep_var": "y", "indep_vars": ["x1", "x2"], "entity_col": "entity_id", "time_col": "year"}, OPTS), "panel_df"),
     (lambda df: moderation.run(df, {"outcome": "score", "predictor": "pre", "moderator": "post"}, OPTS), "continuous_df"),
     (lambda df: reliability.run(df, {"variables": list(df.columns)}, OPTS), "likert_df"),
+    (lambda df: timeseries.run(df, {"value": "value", "time_col": "date"}, _TsOpts()), "ts_stationary"),
 ])
 
-def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df, likert_df):
-    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df, "likert_df": likert_df}
+def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df, likert_df, ts_stationary):
+    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df, "likert_df": likert_df, "ts_stationary": ts_stationary}
     df = m[args]
     result = result_fn(df)
     assert result.interpretation.plain

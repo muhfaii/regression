@@ -16,6 +16,7 @@ from backend.analysis_modules import (
     power_analysis,
     regression,
     reliability,
+    timeseries,
     t_tests,
 )
 from backend.schemas.analysis import RunRequest, ValidateConfigRequest
@@ -56,6 +57,7 @@ _RUNNERS = {
     "mediation": mediation.run,
     "reliability": reliability.run,
     "power_analysis": power_analysis.run,
+    "timeseries": timeseries.run,
 }
 
 # Slot type requirements — mirrors TEST_CATALOG in frontend/src/constants/tests.ts
@@ -76,6 +78,7 @@ _SLOT_TYPES: dict[str, dict[str, str]] = {
     "moderation": {"outcome": "continuous", "predictor": "any", "moderator": "any", "covariates": "any"},
     "mediation": {"outcome": "continuous", "predictor": "any", "mediator": "any", "covariates": "any"},
     "reliability": {"variables": "any"},
+    "timeseries": {"value": "continuous", "time_col": "any", "group_by": "categorical"},
 }
 
 

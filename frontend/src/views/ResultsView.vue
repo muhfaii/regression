@@ -15,6 +15,14 @@ const activeTab = ref<'plain' | 'apa' | 'technical'>(
   session.mode === 'browse' ? 'technical' : 'plain'
 )
 
+function sparkBar(val: number): string {
+  const abs = Math.abs(val)
+  if (abs < 0.05) return '·'
+  const level = Math.min(Math.floor(abs * 8), 7)
+  const bar = '▁▂▃▄▅▆▇█'[level]
+  return val >= 0 ? '+' + bar : '−' + bar
+}
+
 function corrColor(val: number): string {
   const abs = Math.abs(val)
   if (abs < 0.1) return 'transparent'
@@ -27,7 +35,8 @@ const STATUS_ICON: Record<string, string> = { pass: '✓', amber: '⚠', fail: '
 const STATUS_CLASS: Record<string, string> = { pass: 'check-pass', amber: 'check-amber', fail: 'check-fail' }
 
 // Top-level scalar keys rendered as headline cards (skip structural sub-objects)
-const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type', 'simple_slopes', 'jn_region', 'floodlight', 'interaction_f2', 'predictor', 'moderator', 'covariates', 'path_a', 'path_b', 'path_c', 'path_c_prime', 'indirect_effect', 'sobel_z', 'sobel_p', 'bootstrap_ci_low', 'bootstrap_ci_high', 'proportion_mediated', 'mediation_type', 'r_squared_x_m', 'r_squared_x_y', 'r_squared_xm_y', 'coefficients_x_m', 'coefficients_x_y', 'coefficients_xm_y', 'mediator', 'desc_stats', 'vif_table', 'remediation', 'se_justification', 'se_citation'])
+const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type', 'simple_slopes', 'jn_region', 'floodlight', 'interaction_f2', 'predictor', 'moderator', 'covariates', 'path_a', 'path_b', 'path_c', 'path_c_prime', 'indirect_effect', 'sobel_z', 'sobel_p', 'bootstrap_ci_low', 'bootstrap_ci_high', 'proportion_mediated', 'mediation_type', 'r_squared_x_m', 'r_squared_x_y', 'r_squared_xm_y', 'coefficients_x_m', 'coefficients_x_y', 'coefficients_xm_y', 'mediator', 'desc_stats', 'vif_table', 'remediation', 'se_justification', 'se_citation',
+  'acf_values', 'pacf_values', 'decomposition', 'forecast_values', 'forecast_ci_low', 'forecast_ci_high', 'arima_residuals', 'adf_critical_values', 'kpss_critical_values', 'arima_order'])
 
 function scalarCards(stats: Record<string, unknown>) {
   return Object.entries(stats).filter(([k, v]) =>
@@ -195,6 +204,34 @@ const mediationData = computed(() => {
     predictor: s.predictor as string,
     mediator: s.mediator as string,
     outcome: s.outcome as string,
+  }
+})
+
+// Time-series data
+const timeseriesData = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'timeseries') return null
+  const s = r.statistics
+  return {
+    adfPvalue: s.adf_pvalue as number | undefined,
+    adfStatistic: s.adf_statistic as number | undefined,
+    kpssPvalue: s.kpss_pvalue as number | undefined,
+    kpssStatistic: s.kpss_statistic as number | undefined,
+    isStationary: s.is_stationary as boolean | undefined,
+    ljungBoxStat: s.ljung_box_statistic as number | undefined,
+    ljungBoxPval: s.ljung_box_pvalue as number | undefined,
+    acfValues: s.acf_values as { lag: number; value: number }[] | undefined,
+    pacfValues: s.pacf_values as { lag: number; value: number }[] | undefined,
+    isSeasonal: s.is_seasonal as boolean | undefined,
+    seasonalPeriod: s.seasonal_period as number | undefined,
+    seasonalStrength: s.seasonal_strength as number | undefined,
+    arimaOrder: s.arima_order as number[] | undefined,
+    arimaAic: s.arima_aic as number | undefined,
+    arimaBic: s.arima_bic as number | undefined,
+    forecastSteps: s.forecast_steps as number | undefined,
+    forecastValues: s.forecast_values as number[] | undefined,
+    forecastCiLow: s.forecast_ci_low as number[] | undefined,
+    forecastCiHigh: s.forecast_ci_high as number[] | undefined,
   }
 })
 
@@ -728,6 +765,106 @@ function newAnalysis() {
         </div>
       </div>
 
+      <!-- ═══════════════════════════════════════════════════════════════════
+           Time-series analysis
+           ═══════════════════════════════════════════════════════════════════ -->
+      <!-- Stationarity tests -->
+      <div v-if="timeseriesData" class="section">
+        <h3 class="section-title">Stationarity tests</h3>
+        <div class="stationarity-grid">
+          <div v-if="timeseriesData.adfPvalue != null" class="test-card" :class="timeseriesData.isStationary ? 'test-pass' : 'test-fail'">
+            <div class="test-card-title">ADF test</div>
+            <div class="test-card-stat">stat = {{ timeseriesData.adfStatistic?.toFixed(4) }}</div>
+            <div class="test-card-stat">p = {{ timeseriesData.adfPvalue.toFixed(4) }}</div>
+            <div class="test-card-verdict">{{ timeseriesData.isStationary ? '✓ Stationary' : '✗ Non-stationary' }}</div>
+          </div>
+          <div v-if="timeseriesData.kpssPvalue != null" class="test-card" :class="timeseriesData.kpssPvalue < 0.05 ? 'test-fail' : 'test-pass'">
+            <div class="test-card-title">KPSS test</div>
+            <div class="test-card-stat">stat = {{ timeseriesData.kpssStatistic?.toFixed(4) }}</div>
+            <div class="test-card-stat">p = {{ timeseriesData.kpssPvalue.toFixed(4) }}</div>
+            <div class="test-card-verdict">{{ timeseriesData.kpssPvalue < 0.05 ? '✗ Non-stationary' : '✓ Trend-stationary' }}</div>
+          </div>
+        </div>
+        <div v-if="timeseriesData.ljungBoxPval != null" class="ljung-box-card">
+          <span class="ljung-box-label">Ljung-Box Q:</span>
+          <span>χ² = {{ timeseriesData.ljungBoxStat?.toFixed(4) }}, p = {{ timeseriesData.ljungBoxPval.toFixed(4) }}</span>
+        </div>
+      </div>
+
+      <!-- ACF/PACF table -->
+      <div v-if="timeseriesData?.acfValues?.length" class="section">
+        <h3 class="section-title">Autocorrelation function (ACF) &amp; Partial ACF</h3>
+        <div class="acf-table-wrapper">
+          <table class="acf-table">
+            <thead>
+              <tr>
+                <th>Lag</th>
+                <th>ACF</th>
+                <th>Spark</th>
+                <th>PACF</th>
+                <th>Spark</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(acfRow, i) in timeseriesData.acfValues.slice(0, 21)" :key="i">
+                <td class="acf-lag">{{ acfRow.lag }}</td>
+                <td class="acf-val">{{ acfRow.value.toFixed(4) }}</td>
+                <td class="acf-spark"><span class="spark-text">{{ sparkBar(acfRow.value) }}</span></td>
+                <td class="acf-val">{{ (timeseriesData.pacfValues?.[i]?.value ?? 0).toFixed(4) }}</td>
+                <td class="acf-spark"><span class="spark-text">{{ sparkBar(timeseriesData.pacfValues?.[i]?.value ?? 0) }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Seasonal decomposition -->
+      <div v-if="timeseriesData?.isSeasonal" class="section">
+        <h3 class="section-title">Seasonal decomposition</h3>
+        <div class="seasonal-card">
+          <div class="seasonal-row"><span class="seasonal-label">Detected seasonal period</span><span>{{ timeseriesData.seasonalPeriod }}</span></div>
+          <div v-if="timeseriesData.seasonalStrength != null" class="seasonal-row">
+            <span class="seasonal-label">Seasonal strength</span>
+            <span>{{ timeseriesData.seasonalStrength.toFixed(4) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARIMA model -->
+      <div v-if="timeseriesData?.arimaOrder" class="section">
+        <h3 class="section-title">ARIMA model</h3>
+        <div class="arima-card">
+          <div class="arima-row"><span class="arima-label">Order (p,d,q)</span><span class="arima-value">({{ timeseriesData.arimaOrder.join(', ') }})</span></div>
+          <div v-if="timeseriesData.arimaAic != null" class="arima-row"><span class="arima-label">AIC</span><span>{{ timeseriesData.arimaAic.toFixed(2) }}</span></div>
+          <div v-if="timeseriesData.arimaBic != null" class="arima-row"><span class="arima-label">BIC</span><span>{{ timeseriesData.arimaBic.toFixed(2) }}</span></div>
+        </div>
+      </div>
+
+      <!-- Forecast table -->
+      <div v-if="timeseriesData?.forecastValues?.length" class="section">
+        <h3 class="section-title">Forecast ({{ timeseriesData.forecastSteps }} steps)</h3>
+        <div class="forecast-wrapper">
+          <table class="forecast-table">
+            <thead>
+              <tr><th>Step</th><th>Forecast</th><th>95% CI Low</th><th>95% CI High</th><th>Range</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(fv, i) in timeseriesData.forecastValues" :key="i">
+                <td class="fcast-step">{{ i + 1 }}</td>
+                <td class="fcast-val">{{ fv.toFixed(4) }}</td>
+                <td class="fcast-ci">{{ (timeseriesData.forecastCiLow?.[i] ?? 0).toFixed(4) }}</td>
+                <td class="fcast-ci">{{ (timeseriesData.forecastCiHigh?.[i] ?? 0).toFixed(4) }}</td>
+                <td class="fcast-spark">
+                  <span class="spark-range">
+                    {{ sparkBar((timeseriesData.forecastCiLow?.[i] ?? 0) - fv) }}<span class="spark-dot">●</span>{{ sparkBar((timeseriesData.forecastCiHigh?.[i] ?? 0) - fv) }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Effect size -->
       <div v-if="result.effect_size" class="effect-size-section">
         <span class="effect-label">{{ result.effect_size.name }}:</span>
@@ -951,6 +1088,52 @@ function newAnalysis() {
 .model-pooled_ols { background: #6b7280; }
 .panel-absorbed-note { font-size: 13px; color: var(--color-text-muted); }
 .jn-text { font-size: 14px; line-height: 1.6; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px; }
+/* Time-series */
+.stationarity-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.test-card {
+  border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px;
+  min-width: 160px; flex: 1; display: flex; flex-direction: column; gap: 4px;
+}
+.test-pass { background: #f0fdf4; border-color: #bbf7d0; }
+.test-fail { background: #fef2f2; border-color: #fecaca; }
+.test-card-title { font-weight: 700; font-size: 14px; }
+.test-card-stat { font-size: 13px; color: var(--color-text-muted); }
+.test-card-verdict { font-size: 12px; font-weight: 700; margin-top: 4px; }
+.ljung-box-card {
+  border: 1px solid var(--color-border); border-radius: 8px;
+  padding: 10px 14px; font-size: 13px; display: flex; gap: 8px;
+  background: var(--color-surface);
+}
+.ljung-box-label { font-weight: 600; color: var(--color-text-muted); }
+.acf-table-wrapper { overflow-x: auto; }
+.acf-table { border-collapse: collapse; font-size: 13px; width: 100%; border: 1px solid var(--color-border); }
+.acf-table th { text-align: left; padding: 6px 10px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 11px; text-transform: uppercase; color: var(--color-text-muted); }
+.acf-table td { padding: 4px 10px; border-bottom: 1px solid var(--color-border); }
+.acf-lag, .acf-val { font-variant-numeric: tabular-nums; }
+.acf-spark { width: 80px; }
+.spark-text { font-size: 14px; letter-spacing: 0.5px; color: var(--color-primary); }
+.seasonal-card {
+  border: 1px solid var(--color-border); border-radius: 8px;
+  padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; font-size: 13px;
+}
+.seasonal-row { display: flex; justify-content: space-between; }
+.seasonal-label { font-weight: 600; color: var(--color-text-muted); }
+.arima-card {
+  border: 1px solid var(--color-border); border-radius: 8px;
+  padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; font-size: 13px;
+}
+.arima-row { display: flex; justify-content: space-between; }
+.arima-label { font-weight: 600; color: var(--color-text-muted); }
+.arima-value { font-weight: 700; color: var(--color-primary); }
+.forecast-wrapper { overflow-x: auto; }
+.forecast-table { border-collapse: collapse; font-size: 13px; width: 100%; border: 1px solid var(--color-border); }
+.forecast-table th { text-align: left; padding: 6px 10px; background: var(--color-surface); border-bottom: 1px solid var(--color-border); font-size: 11px; text-transform: uppercase; color: var(--color-text-muted); }
+.forecast-table td { padding: 4px 10px; border-bottom: 1px solid var(--color-border); }
+.fcast-step, .fcast-val, .fcast-ci { font-variant-numeric: tabular-nums; }
+.fcast-spark { width: 100px; }
+.spark-range { font-size: 14px; display: flex; align-items: center; gap: 2px; }
+.spark-dot { font-size: 6px; color: var(--color-primary); }
+
 .mediation-badge { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px; text-transform: capitalize; }
 .mediation-none { background: #e5e7eb; color: #374151; }
 .mediation-partial { background: #fef3c7; color: #92400e; }

@@ -23,7 +23,17 @@ const test = computed(() => analysis.selectedTest)
 const columns = computed(() => dataset.columns)
 const isParamInput = computed(() => test.value?.type === 'parameter_input')
 
-function updateExtra(key: string, value: string | number) {
+const visibleExtrasFields = computed(() => {
+  const fields = test.value?.extras_fields ?? []
+  const extras = analysis.options.extras
+  return fields.filter(p => {
+    if (!p.depends_on) return true
+    const currentVal = extras[p.depends_on.parameter]
+    return p.depends_on.values.some(v => String(v) === String(currentVal))
+  })
+})
+
+function updateExtra(key: string, value: string | number | boolean) {
   const num = typeof value === 'string' && value !== '' && !isNaN(Number(value)) ? Number(value) : value
   analysis.options.extras = { ...analysis.options.extras, [key]: num }
 }
@@ -183,6 +193,39 @@ async function runAnalysis() {
       </div>
     </div>
 
+    <!-- Extras fields (for column_assignment tests with extras_fields, e.g. time-series) -->
+    <div v-if="!isParamInput && visibleExtrasFields.length" class="extras">
+      <h3 class="extras-title">Additional settings</h3>
+      <div v-for="param in visibleExtrasFields" :key="param.key" class="param-field">
+        <label class="param-label">{{ param.label }}</label>
+        <select
+          v-if="param.type === 'select'"
+          class="param-select"
+          :value="analysis.options.extras[param.key] ?? param.default ?? ''"
+          @change="updateExtra(param.key, ($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="opt in param.options ?? []" :key="opt" :value="opt">{{ opt }}</option>
+        </select>
+        <label v-else-if="param.type === 'boolean'" class="bool-field">
+          <input
+            type="checkbox"
+            :checked="analysis.options.extras[param.key] ?? param.default ?? false"
+            @change="updateExtra(param.key, ($event.target as HTMLInputElement).checked)"
+          />
+          {{ param.label }}
+        </label>
+        <input
+          v-else
+          type="number"
+          class="param-input"
+          :value="analysis.options.extras[param.key] ?? param.default ?? ''"
+          :placeholder="param.label"
+          step="any"
+          @input="updateExtra(param.key, parseFloat(($event.target as HTMLInputElement).value) || ($event.target as HTMLInputElement).value)"
+        />
+      </div>
+    </div>
+
     <TypeConflictBanner v-if="!isParamInput" :conflicts="conflicts" @type-change="triggerValidation" />
 
     <!-- Options -->
@@ -313,9 +356,13 @@ async function runAnalysis() {
   padding: 10px 14px;
   font-size: 13px;
 }
+.extras { display: flex; flex-direction: column; gap: 14px; padding-top: 8px; border-top: 1px solid var(--color-border); }
+.extras-title { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--color-text-muted); margin: 0; }
 .params { display: flex; flex-direction: column; gap: 14px; }
 .param-field { display: flex; flex-direction: column; gap: 4px; }
 .param-label { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.bool-field { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.bool-field input { width: 16px; height: 16px; cursor: pointer; }
 .param-select, .param-input {
   border: 1px solid var(--color-border);
   border-radius: 8px;

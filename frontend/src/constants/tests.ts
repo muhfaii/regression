@@ -208,6 +208,32 @@ export const TEST_CATALOG: TestDefinition[] = [
     ],
   },
 
+  // ── Advanced ───────────────────────────────────────────────────────────────
+  {
+    key: 'timeseries',
+    name: 'Time-Series Analysis',
+    category: 'Advanced',
+    descriptor: 'stationarity, ARIMA',
+    tooltip: 'Analyse time-series data with stationarity tests, autocorrelation, and ARIMA modelling.',
+    slots: [
+      { key: 'value', label: 'Value column', required_type: 'continuous', multiple: false },
+      { key: 'time_col', label: 'Time/date column', required_type: 'any', multiple: false },
+      { key: 'group_by', label: 'Group by (optional)', required_type: 'categorical', multiple: false },
+    ],
+    extras_fields: [
+      { key: 'order', label: 'ARIMA order selection', type: 'select', options: ['Auto (AIC)', 'Manual'], default: 'Auto (AIC)' },
+      { key: 'p', label: 'p (AR order)', type: 'number', default: 1, depends_on: { parameter: 'order', values: ['Manual'] } },
+      { key: 'd', label: 'd (difference order)', type: 'number', default: 0, depends_on: { parameter: 'order', values: ['Manual'] } },
+      { key: 'q', label: 'q (MA order)', type: 'number', default: 0, depends_on: { parameter: 'order', values: ['Manual'] } },
+      { key: 'seasonal', label: 'Seasonal model', type: 'boolean', default: false },
+      { key: 'P', label: 'P (seasonal AR)', type: 'number', default: 1, depends_on: { parameter: 'seasonal', values: [true] } },
+      { key: 'D', label: 'D (seasonal diff)', type: 'number', default: 0, depends_on: { parameter: 'seasonal', values: [true] } },
+      { key: 'Q', label: 'Q (seasonal MA)', type: 'number', default: 1, depends_on: { parameter: 'seasonal', values: [true] } },
+      { key: 's', label: 'Seasonal period', type: 'number', default: 12, depends_on: { parameter: 'seasonal', values: [true] } },
+      { key: 'forecast_steps', label: 'Forecast steps', type: 'number', default: 12 },
+    ],
+  },
+
   // ── Advanced (coming soon) ─────────────────────────────────────────────────
   {
     key: 'mixed_anova',
