@@ -8,6 +8,7 @@ from backend.analysis_modules import (
     chi_square,
     correlation,
     descriptive,
+    factor_analysis,
     logistic,
     mediation,
     moderation,
@@ -16,6 +17,7 @@ from backend.analysis_modules import (
     power_analysis,
     regression,
     reliability,
+    survival,
     timeseries,
     t_tests,
 )
@@ -58,6 +60,8 @@ _RUNNERS = {
     "reliability": reliability.run,
     "power_analysis": power_analysis.run,
     "timeseries": timeseries.run,
+    "factor_analysis": factor_analysis.run,
+    "survival_analysis": survival.run,
 }
 
 # Slot type requirements — mirrors TEST_CATALOG in frontend/src/constants/tests.ts
@@ -79,6 +83,8 @@ _SLOT_TYPES: dict[str, dict[str, str]] = {
     "mediation": {"outcome": "continuous", "predictor": "any", "mediator": "any", "covariates": "any"},
     "reliability": {"variables": "any"},
     "timeseries": {"value": "continuous", "time_col": "any", "group_by": "categorical"},
+    "factor_analysis": {"variables": "continuous"},
+    "survival_analysis": {"duration": "continuous", "event": "categorical", "predictors": "any", "group": "categorical"},
 }
 
 

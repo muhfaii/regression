@@ -208,6 +208,23 @@ export const TEST_CATALOG: TestDefinition[] = [
     ],
   },
 
+  // ── Psychometrics ────────────────────────────────────────────────────────────
+  {
+    key: 'factor_analysis',
+    name: 'Factor Analysis (EFA)',
+    category: 'Psychometrics',
+    descriptor: 'latent structure',
+    tooltip: 'Identifies underlying latent factors from a set of observed variables using exploratory factor analysis.',
+    slots: [
+      { key: 'variables', label: 'Indicator variables', required_type: 'continuous', multiple: true },
+    ],
+    extras_fields: [
+      { key: 'n_factors', label: 'Number of factors (0 = auto)', type: 'number', default: 0 },
+      { key: 'rotation', label: 'Rotation method', type: 'select', options: ['varimax', 'oblimin', 'promax', 'none'], default: 'varimax' },
+      { key: 'method', label: 'Extraction method', type: 'select', options: ['principal_factor', 'ml', 'pca'], default: 'principal_factor' },
+    ],
+  },
+
   // ── Advanced ───────────────────────────────────────────────────────────────
   {
     key: 'timeseries',
@@ -231,6 +248,20 @@ export const TEST_CATALOG: TestDefinition[] = [
       { key: 'Q', label: 'Q (seasonal MA)', type: 'number', default: 1, depends_on: { parameter: 'seasonal', values: [true] } },
       { key: 's', label: 'Seasonal period', type: 'number', default: 12, depends_on: { parameter: 'seasonal', values: [true] } },
       { key: 'forecast_steps', label: 'Forecast steps', type: 'number', default: 12 },
+    ],
+  },
+
+  {
+    key: 'survival_analysis',
+    name: 'Survival Analysis',
+    category: 'Advanced',
+    descriptor: 'KM, Cox PH',
+    tooltip: 'Analyse time-to-event data with Kaplan-Meier curves, log-rank tests, and Cox proportional hazards models.',
+    slots: [
+      { key: 'duration', label: 'Time/duration column', required_type: 'continuous', multiple: false },
+      { key: 'event', label: 'Event indicator (1=event, 0=censored)', required_type: 'categorical', multiple: false },
+      { key: 'predictors', label: 'Predictor variables', required_type: 'any', multiple: true },
+      { key: 'group', label: 'Group variable (for KM/log-rank)', required_type: 'categorical', multiple: false },
     ],
   },
 

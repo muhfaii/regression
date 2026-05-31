@@ -8,6 +8,7 @@ from backend.analysis_modules import (
     chi_square,
     correlation,
     descriptive,
+    factor_analysis,
     logistic,
     moderation,
     multicomp,
@@ -16,6 +17,7 @@ from backend.analysis_modules import (
     power_analysis,
     regression,
     reliability,
+    survival,
     timeseries,
     t_tests,
 )
@@ -756,6 +758,130 @@ def test_regression_no_p_adjust(continuous_df):
 
 
 # ---------------------------------------------------------------------------
+# Factor Analysis
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def fa_known_df():
+    """12 items loading on 3 factors (4 each)."""
+    rng = np.random.default_rng(42)
+    n = 200
+    factors = rng.normal(0, 1, (n, 3))
+    items = {}
+    for i in range(4):
+        items[f"f1_item_{i+1}"] = (0.7 * factors[:, 0] + 0.3 * rng.normal(0, 1, n)).tolist()
+    for i in range(4):
+        items[f"f2_item_{i+1}"] = (0.7 * factors[:, 1] + 0.3 * rng.normal(0, 1, n)).tolist()
+    for i in range(4):
+        items[f"f3_item_{i+1}"] = (0.7 * factors[:, 2] + 0.3 * rng.normal(0, 1, n)).tolist()
+    return pd.DataFrame(items)
+
+
+class _FaOpts:
+    assumption_checks = True
+    effect_size = False
+    post_hoc = False
+    extras = {}
+
+
+def test_factor_analysis_smoke(fa_known_df):
+    opts = _FaOpts()
+    opts.extras = {"n_factors": 3, "rotation": "varimax", "method": "principal_factor"}
+    result = factor_analysis.run(fa_known_df, {"variables": list(fa_known_df.columns)}, opts)
+    assert result.test_key == "factor_analysis"
+    assert result.statistics["n_factors"] == 3
+    assert result.statistics["n_variables"] == 12
+    assert result.statistics["kmo_total"] > 0.5
+    assert len(result.statistics["loadings"]) == 12
+    assert len(result.statistics["scree"]) == 12
+    assert len(result.statistics["variance_explained_pct"]) == 3
+
+
+def test_factor_analysis_auto_factors(fa_known_df):
+    """Auto-detect should find ~3 factors."""
+    opts = _FaOpts()
+    opts.extras = {"n_factors": 0, "rotation": "varimax", "method": "principal_factor"}
+    result = factor_analysis.run(fa_known_df, {"variables": list(fa_known_df.columns)}, opts)
+    assert 2 <= result.statistics["n_factors"] <= 4
+
+
+def test_factor_analysis_too_few_vars():
+    with pytest.raises(ValueError, match="At least three"):
+        factor_analysis.run(pd.DataFrame({"a": [1, 2], "b": [3, 4]}), {"variables": ["a", "b"]}, OPTS)
+
+
+def test_factor_analysis_assumption_checks(fa_known_df):
+    opts = _FaOpts()
+    opts.extras = {"n_factors": 3}
+    result = factor_analysis.run(fa_known_df, {"variables": list(fa_known_df.columns)}, opts)
+    assert isinstance(result.assumption_checks, list)
+
+
+def test_factor_analysis_no_assumption_checks(fa_known_df):
+    opts = _FaOpts()
+    opts.extras = {"n_factors": 3}
+    opts.assumption_checks = False
+    result = factor_analysis.run(fa_known_df, {"variables": list(fa_known_df.columns)}, opts)
+    assert len(result.assumption_checks) == 0
+
+
+# ---------------------------------------------------------------------------
+# Survival Analysis
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def survival_df():
+    """Simulated survival data with 2 groups (treatment lives longer)."""
+    rng = np.random.default_rng(42)
+    n = 100
+    dur_t = rng.exponential(20, n // 2)
+    dur_c = rng.exponential(10, n // 2)
+    duration = np.concatenate([dur_t, dur_c])
+    event = rng.binomial(1, 0.8, n).tolist()
+    group = ["Treatment"] * (n // 2) + ["Control"] * (n // 2)
+    treat = [1] * (n // 2) + [0] * (n // 2)
+    return pd.DataFrame({"duration": duration, "event": event, "group": group, "treat": treat})
+
+
+def test_survival_km_smoke(survival_df):
+    result = survival.run(survival_df, {"duration": "duration", "event": "event", "group": "group"}, OPTS)
+    assert result.test_key == "survival_analysis"
+    assert result.statistics["n_obs"] == 100
+    assert result.statistics["km_median"] is not None
+    assert "km_survival_curve" in result.statistics
+    curve = result.statistics["km_survival_curve"]
+    assert len(curve["times"]) > 0
+    assert all(0 <= s <= 1 for s in curve["survival"])
+    assert "logrank_statistic" in result.statistics
+    assert result.statistics["logrank_p"] is not None
+
+
+def test_survival_cox_smoke(survival_df):
+    """Cox should find treatment reduces hazard (HR < 1)."""
+    result = survival.run(survival_df, {
+        "duration": "duration", "event": "event",
+        "predictors": ["treat"],
+    }, OPTS)
+    assert result.statistics["cox"] is not None
+    hr_table = result.statistics["cox"]["hr_table"]
+    assert len(hr_table) == 1
+    assert result.statistics["cox_converged"] is True
+
+
+def test_survival_too_few_events():
+    df = pd.DataFrame({"duration": [1, 2, 3, 4, 5], "event": [0, 0, 0, 0, 0]})
+    with pytest.raises(ValueError, match="contain both 0 and 1"):
+        survival.run(df, {"duration": "duration", "event": "event"}, OPTS)
+
+
+def test_survival_no_group(survival_df):
+    """KM should work without a group variable."""
+    result = survival.run(survival_df, {"duration": "duration", "event": "event"}, OPTS)
+    assert result.statistics["km_median"] is not None
+    assert "logrank_statistic" not in result.statistics
+
+
+# ---------------------------------------------------------------------------
 # Interpretation fields present on all modules
 # ---------------------------------------------------------------------------
 
@@ -773,10 +899,12 @@ def test_regression_no_p_adjust(continuous_df):
     (lambda df: moderation.run(df, {"outcome": "score", "predictor": "pre", "moderator": "post"}, OPTS), "continuous_df"),
     (lambda df: reliability.run(df, {"variables": list(df.columns)}, OPTS), "likert_df"),
     (lambda df: timeseries.run(df, {"value": "value", "time_col": "date"}, _TsOpts()), "ts_stationary"),
+    (lambda df: factor_analysis.run(df, {"variables": list(df.columns)}, _FaOpts()), "fa_known_df"),
+    (lambda df: survival.run(df, {"duration": "duration", "event": "event"}, OPTS), "survival_df"),
 ])
 
-def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df, likert_df, ts_stationary):
-    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df, "likert_df": likert_df, "ts_stationary": ts_stationary}
+def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df, likert_df, ts_stationary, fa_known_df, survival_df):
+    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df, "likert_df": likert_df, "ts_stationary": ts_stationary, "fa_known_df": fa_known_df, "survival_df": survival_df}
     df = m[args]
     result = result_fn(df)
     assert result.interpretation.plain
