@@ -38,7 +38,7 @@ function select(key: string) {
               active: analysis.selectedTestKey === test.key,
               'coming-soon': test.coming_soon,
             }"
-            :data-tooltip="test.coming_soon ? 'This test is coming soon. Add your email to be notified.' : test.tooltip"
+            :data-tooltip="test.coming_soon ? 'This test is coming soon.' : test.tooltip"
             :disabled="test.coming_soon"
             @click="select(test.key)"
           >
@@ -54,7 +54,7 @@ function select(key: string) {
     <div class="browse-main">
       <div v-if="!analysis.selectedTestKey" class="empty-state">
         <div class="empty-icon">⬡</div>
-        <p class="empty-primary">Choose a statistical test</p>
+        <p class="empty-primary">Select a test from the sidebar to get started</p>
         <p class="empty-secondary">Select a test from the sidebar to configure variables and run the analysis.</p>
       </div>
       <RouterView v-else />
@@ -86,12 +86,18 @@ function select(key: string) {
   z-index: 10;
 }
 .not-sure-link {
+  display: block;
+  text-align: center;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--color-primary);
+  font-weight: 700;
+  color: #fff;
+  background: var(--color-primary);
+  padding: 8px 12px;
+  border-radius: 20px;
   text-decoration: none;
+  transition: background 0.15s;
 }
-.not-sure-link:hover { text-decoration: underline; }
+.not-sure-link:hover { background: var(--color-primary-hover); }
 .sidebar-group { padding: 8px 0; }
 .sidebar-category {
   font-size: 11px;

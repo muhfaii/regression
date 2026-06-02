@@ -162,7 +162,7 @@ function reset() {
 
     <!-- Re-import confirmation dialog -->
     <dialog :open="showReimportDialog" class="confirm-dialog">
-      <p>This will clear the current session. Continue?</p>
+      <p>This will replace your current data. Continue?</p>
       <div class="dialog-actions">
         <button class="btn-ghost" @click="cancelReimport">Cancel</button>
         <button class="btn-danger" @click="confirmReimport">Yes, replace data</button>

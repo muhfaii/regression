@@ -17,6 +17,13 @@ const recommendation = ref<{ test_key: string; reason: string } | null>(null)
 const currentQuestion = computed(() => WIZARD_QUESTIONS[step.value])
 const totalSteps = WIZARD_QUESTIONS.length
 
+const visibleStepIndices = computed(() => {
+  if (answers.value[0] !== 'compare') return [0, 2, 3]
+  return [0, 1, 2, 3]
+})
+const effectiveStep = computed(() => visibleStepIndices.value.indexOf(step.value))
+const effectiveTotal = computed(() => visibleStepIndices.value.length)
+
 function answer(value: string | null) {
   answers.value[step.value] = value
   direction.value = 'forward'
@@ -75,7 +82,7 @@ const recommendedTest = computed(() =>
       <p class="rec-reason">{{ recommendation.reason }}</p>
 
       <div class="rec-assumptions">
-        <div class="rec-section-label">Assumption checks that will run:</div>
+        <div class="rec-section-label">What we'll check automatically:</div>
         <p class="rec-assumption-note">Normality, equal variances, and other relevant checks will run automatically — no setup needed.</p>
       </div>
 
@@ -88,18 +95,18 @@ const recommendedTest = computed(() =>
     <!-- Wizard steps -->
     <div v-else class="wizard">
       <!-- Progress dots -->
-      <div class="progress-dots" :aria-label="`Step ${step + 1} of ${totalSteps}`">
+      <div class="progress-dots" :aria-label="`Step ${effectiveStep + 1} of ${effectiveTotal}`">
         <span
-          v-for="i in totalSteps"
+          v-for="i in effectiveTotal"
           :key="i"
           class="dot"
-          :class="{ active: i - 1 === step, done: i - 1 < step }"
+          :class="{ active: i - 1 === effectiveStep, done: i - 1 < effectiveStep }"
         />
       </div>
 
       <Transition :name="direction === 'forward' ? 'slide-fwd' : 'slide-back'" mode="out-in">
         <div class="wizard-card" :key="step">
-          <p class="step-label">Step {{ step + 1 }} of {{ totalSteps }}</p>
+          <p class="step-label">Step {{ effectiveStep + 1 }} of {{ effectiveTotal }}</p>
           <h2 class="wizard-question">{{ currentQuestion.question }}</h2>
 
           <div class="wizard-options">

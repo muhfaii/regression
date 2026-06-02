@@ -290,7 +290,7 @@ async function runAnalysis() {
 
 <style scoped>
 .no-test { color: var(--color-text-muted); font-size: 14px; }
-.config-panel { display: flex; flex-direction: column; gap: 24px; max-width: 480px; }
+.config-panel { display: flex; flex-direction: column; gap: 24px; max-width: 640px; margin: 0 auto; }
 .test-title { font-size: 20px; }
 .test-tooltip { font-size: 13px; color: var(--color-text-muted); }
 .slots { display: flex; flex-direction: column; gap: 16px; }

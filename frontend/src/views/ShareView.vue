@@ -24,12 +24,44 @@ function scalarCards(stats: Record<string, unknown>) {
 }
 
 function fmt(val: unknown): string {
-  if (typeof val === 'number') return Number.isInteger(val) ? String(val) : val.toFixed(4)
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) return String(val)
+    if (Math.abs(val) < 0.001) return val.toExponential(2)
+    if (Math.abs(val) > 999) return val.toFixed(1)
+    return val.toFixed(3)
+  }
   if (typeof val === 'boolean') return val ? 'Yes' : 'No'
   return String(val)
 }
 
+const LABEL_MAP: Record<string, string> = {
+  r_squared: 'R²',
+  adj_r_squared: 'Adjusted R²',
+  f_statistic: 'F-statistic',
+  p_value: 'p-value',
+  n_obs: 'N',
+  chi2_statistic: 'χ²',
+  log_likelihood: 'Log-likelihood',
+  aic: 'AIC',
+  bic: 'BIC',
+  rmse: 'RMSE',
+  mae: 'MAE',
+  dof: 'df',
+  n_vars: 'Variables',
+  n_factors: 'Factors',
+  n_indicators: 'Indicators',
+  n_groups: 'Groups',
+  n_events: 'Events',
+  event_rate: 'Event rate',
+  n_subjects: 'Subjects',
+  n_predictors: 'Predictors',
+  concordance: 'Concordance',
+  llf: 'Log-likelihood',
+  se_type: 'SE type',
+}
+
 function fmtLabel(key: string): string {
+  if (LABEL_MAP[key]) return LABEL_MAP[key]
   return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 

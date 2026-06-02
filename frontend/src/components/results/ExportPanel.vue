@@ -74,7 +74,7 @@ async function copyShareUrl() {
 
     <div class="export-actions">
       <button class="export-btn" @click="copyApa" :disabled="!results.activeResult">
-        {{ copyDone ? '✓ Copied' : 'Copy APA 7' }}
+        {{ copyDone ? '✓ Copied' : 'Copy APA 7th edition' }}
       </button>
 
       <button class="export-btn" @click="downloadWord" :disabled="downloading || !results.activeResult">

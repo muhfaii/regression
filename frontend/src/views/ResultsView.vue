@@ -6,6 +6,11 @@ import { useSessionStore } from '../stores/session'
 import type { DescStat, VifEntry, Remediation, CoefficientRow } from '../types/results'
 import ExportPanel from '../components/results/ExportPanel.vue'
 
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from 'chart.js'
+import { Line } from 'vue-chartjs'
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
+
 const router = useRouter()
 const results = useResultsStore()
 const session = useSessionStore()
@@ -36,7 +41,8 @@ const STATUS_CLASS: Record<string, string> = { pass: 'check-pass', amber: 'check
 
 // Top-level scalar keys rendered as headline cards (skip structural sub-objects)
 const SKIP_KEYS = new Set(['variables', 'groups', 'coefficients', 'post_hoc', 'post_hoc_bonferroni', 'contingency_table', 'outcome_categories', 'variable_names', 'matrix_pearson', 'matrix_spearman', 'matrix_kendall', 'matrix_p_pearson', 'matrix_p_spearman', 'matrix_p_kendall', 'matrix_p_pearson_adj', 'matrix_p_spearman_adj', 'matrix_p_kendall_adj', 'p_adjust_method', 'n_vars', 'terms', 'bplm', 'hausman', 'selection_steps', 'absorbed_vars', 'entity_col', 'time_col', 'model_type', 'simple_slopes', 'jn_region', 'floodlight', 'interaction_f2', 'predictor', 'moderator', 'covariates', 'path_a', 'path_b', 'path_c', 'path_c_prime', 'indirect_effect', 'sobel_z', 'sobel_p', 'bootstrap_ci_low', 'bootstrap_ci_high', 'proportion_mediated', 'mediation_type', 'r_squared_x_m', 'r_squared_x_y', 'r_squared_xm_y', 'coefficients_x_m', 'coefficients_x_y', 'coefficients_xm_y', 'mediator', 'desc_stats', 'vif_table', 'remediation', 'se_justification', 'se_citation',
-  'acf_values', 'pacf_values', 'decomposition', 'forecast_values', 'forecast_ci_low', 'forecast_ci_high', 'arima_residuals', 'adf_critical_values', 'kpss_critical_values', 'arima_order'])
+  'acf_values', 'pacf_values', 'decomposition', 'forecast_values', 'forecast_ci_low', 'forecast_ci_high', 'arima_residuals', 'adf_critical_values', 'kpss_critical_values', 'arima_order',
+  'km_survival_curve', 'cox', 'cox_converged', 'cox_warnings', 'group_names', 'n_events', 'event_rate', 'km_median', 'logrank_statistic', 'logrank_p'])
 
 function scalarCards(stats: Record<string, unknown>) {
   return Object.entries(stats).filter(([k, v]) =>
@@ -45,12 +51,44 @@ function scalarCards(stats: Record<string, unknown>) {
 }
 
 function fmt(val: unknown): string {
-  if (typeof val === 'number') return Number.isInteger(val) ? String(val) : val.toFixed(4)
+  if (typeof val === 'number') {
+    if (Number.isInteger(val)) return String(val)
+    if (Math.abs(val) < 0.001) return val.toExponential(2)
+    if (Math.abs(val) > 999) return val.toFixed(1)
+    return val.toFixed(3)
+  }
   if (typeof val === 'boolean') return val ? 'Yes' : 'No'
   return String(val)
 }
 
+const LABEL_MAP: Record<string, string> = {
+  r_squared: 'R²',
+  adj_r_squared: 'Adjusted R²',
+  f_statistic: 'F-statistic',
+  p_value: 'p-value',
+  n_obs: 'N',
+  chi2_statistic: 'χ²',
+  log_likelihood: 'Log-likelihood',
+  aic: 'AIC',
+  bic: 'BIC',
+  rmse: 'RMSE',
+  mae: 'MAE',
+  dof: 'df',
+  n_vars: 'Variables',
+  n_factors: 'Factors',
+  n_indicators: 'Indicators',
+  n_groups: 'Groups',
+  n_events: 'Events',
+  event_rate: 'Event rate',
+  n_subjects: 'Subjects',
+  n_predictors: 'Predictors',
+  concordance: 'Concordance',
+  llf: 'Log-likelihood',
+  se_type: 'SE type',
+}
+
 function fmtLabel(key: string): string {
+  if (LABEL_MAP[key]) return LABEL_MAP[key]
   return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
@@ -235,11 +273,142 @@ const timeseriesData = computed(() => {
   }
 })
 
+// Survival data
+const survivalData = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'survival_analysis') return null
+  const s = r.statistics
+  return {
+    nEvents: s.n_events as number,
+    eventRate: s.event_rate as number,
+    kmMedian: s.km_median as number | null,
+    kmCurve: s.km_survival_curve as { times: number[]; survival: number[]; ci_lower: number[] | null; ci_upper: number[] | null } | undefined,
+    logrankStat: s.logrank_statistic as number | undefined,
+    logrankP: s.logrank_p as number | undefined,
+    groupNames: s.group_names as string[] | undefined,
+    cox: s.cox as { n_predictors: number; hr_table: { predictor: string; coef: number; hr: number; se: number; z: number; p: number; ci_lower: number; ci_upper: number }[]; concordance: number; log_likelihood: number } | undefined,
+    coxConverged: s.cox_converged as boolean | undefined,
+    coxWarnings: s.cox_warnings as string[] | undefined,
+  }
+})
+
+// Mixed ANOVA data
+const mixedAnovaData = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'mixed_anova') return null
+  const s = r.statistics
+  return {
+    effects: s.effects as { effect: string; f_statistic: number; df_num: number; df_den: number; p_value: number }[],
+    nSubjects: s.n_subjects as number,
+    cellStats: s.cell_stats as { [key: string]: string | number }[],
+    withinLevels: s.within_levels as string[],
+    hasBetween: s.has_between as boolean,
+    betweenFactor: s.between_factor as string | undefined,
+    mauchly: s.mauchly as { W: number; chi2: number; df: number; p_value: number; eps_gg: number } | undefined,
+    postHocWithin: s.post_hoc_within as { level1: string; level2: string; mean_diff: number; t_stat: number; p_adj: number; reject: boolean }[] | undefined,
+    postHocBetween: s.post_hoc_between as { group1: string; group2: string; mean_diff: number; p_adj: number; reject: boolean }[] | undefined,
+  }
+})
+
+// CFA data
+const cfaData = computed(() => {
+  const r = result.value
+  if (r?.test_key !== 'cfa') return null
+  const s = r.statistics
+  return {
+    nIndicators: s.n_indicators as number,
+    nFactors: s.n_factors as number,
+    chi2: s.chi2 as number,
+    df: s.df as number,
+    pValue: s.p_value as number,
+    cfi: s.cfi as number,
+    tli: s.tli as number,
+    rmsea: s.rmsea as number,
+    rmseaLower: s.rmsea_ci_lower as number,
+    rmseaUpper: s.rmsea_ci_upper as number,
+    srmr: s.srmr as number,
+    converged: s.converged as boolean,
+    loadings: s.loadings as { indicator: string; factor: string; loading: number; loading_std: number }[],
+    factorCorrelations: s.factor_correlations as { factor1: string; factor2: string; correlation: number }[] | null,
+  }
+})
+
 const MODEL_TYPE_LABEL: Record<string, string> = {
   fe: 'Fixed Effects', re: 'Random Effects', pooled_ols: 'Pooled OLS',
 }
 const MODEL_TYPE_COLOR: Record<string, string> = {
   fe: '#7c3aed', re: '#2563eb', pooled_ols: '#6b7280',
+}
+
+const chartReady = ref(true)
+
+const kmChartData = computed(() => {
+  const d = survivalData.value?.kmCurve
+  if (!d) return { labels: [], datasets: [] }
+  const baseColor = 'rgba(37, 99, 235, 0.8)'
+  const datasets: {
+    label: string; data: number[]; stepped: 'before'; borderColor: string;
+    backgroundColor: string; borderWidth: number; pointRadius: number;
+    borderDash?: number[]; fill?: string | boolean;
+  }[] = [
+    {
+      label: 'Survival probability',
+      data: d.survival,
+      stepped: 'before' as const,
+      borderColor: baseColor,
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+    },
+  ]
+  if (d.ci_lower != null && d.ci_upper != null) {
+    datasets.push({
+      label: '95% CI (upper)',
+      data: d.ci_upper,
+      stepped: 'before' as const,
+      borderColor: 'rgba(37, 99, 235, 0.25)',
+      backgroundColor: 'rgba(37, 99, 235, 0.08)',
+      borderWidth: 1,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      fill: '+2',
+    })
+    datasets.push({
+      label: '95% CI (lower)',
+      data: d.ci_lower,
+      stepped: 'before' as const,
+      borderColor: 'rgba(37, 99, 235, 0.25)',
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderDash: [4, 4],
+      pointRadius: 0,
+      fill: false,
+    })
+  }
+  return { labels: d.times as (string | number)[], datasets }
+})
+
+const kmChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  scales: {
+    x: {
+      title: { display: true, text: 'Time' },
+    },
+    y: {
+      title: { display: true, text: 'Survival probability' },
+      min: 0,
+      max: 1,
+    },
+  },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      callbacks: {
+        label: (ctx: { raw: unknown }) => `S(t) = ${Number(ctx.raw).toFixed(3)}`,
+      },
+    },
+  },
 }
 
 function newAnalysis() {
@@ -262,7 +431,7 @@ function newAnalysis() {
       >
         {{ r.test_name }}
       </div>
-      <p class="signin-nudge">Sign in to save history across sessions.</p>
+      <p class="signin-nudge">Create an account to save your analysis history.</p>
     </aside>
 
     <!-- Main results -->
@@ -766,6 +935,78 @@ function newAnalysis() {
       </div>
 
       <!-- ═══════════════════════════════════════════════════════════════════
+           Survival analysis
+           ═══════════════════════════════════════════════════════════════════ -->
+      <!-- Survival overview stats -->
+      <div v-if="survivalData" class="section">
+        <h3 class="section-title">Survival summary</h3>
+        <div class="survival-stats-grid">
+          <div class="test-card">
+            <div class="test-card-title">Median survival</div>
+            <div class="test-card-stat">{{ survivalData.kmMedian != null ? survivalData.kmMedian.toFixed(1) : 'Not reached' }}</div>
+          </div>
+          <div class="test-card">
+            <div class="test-card-title">Events</div>
+            <div class="test-card-stat">{{ survivalData.nEvents }} / {{ result.n_obs }} ({{ (survivalData.eventRate * 100).toFixed(1) }}%)</div>
+          </div>
+          <div v-if="survivalData.logrankP != null" class="test-card" :class="survivalData.logrankP < 0.05 ? 'test-pass' : 'test-amber'">
+            <div class="test-card-title">Log-rank test</div>
+            <div class="test-card-stat">χ² = {{ survivalData.logrankStat?.toFixed(2) }}</div>
+            <div class="test-card-stat">p = {{ survivalData.logrankP.toFixed(4) }}</div>
+            <div class="test-card-verdict">{{ survivalData.logrankP < 0.05 ? '✓ Significant' : 'Not significant' }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KM survival curve chart -->
+      <div v-if="survivalData?.kmCurve" class="section">
+        <h3 class="section-title">Kaplan-Meier survival curve</h3>
+        <div class="chart-wrapper">
+          <Line
+            v-if="chartReady"
+            :data="kmChartData"
+            :options="kmChartOptions"
+          />
+        </div>
+      </div>
+
+      <!-- Cox PH model table -->
+      <div v-if="survivalData?.cox" class="section">
+        <h3 class="section-title">Cox proportional hazards model</h3>
+        <div v-if="!survivalData.coxConverged" class="warning-banner">
+          ⚠ Cox model did not converge. Results may be unreliable.
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Predictor</th>
+              <th>Coefficient</th>
+              <th>Hazard Ratio</th>
+              <th>SE</th>
+              <th>z</th>
+              <th>p</th>
+              <th>95% CI</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in survivalData.cox.hr_table" :key="row.predictor" :class="{ 'sig-row': row.p < 0.05 }">
+              <td class="group-name">{{ row.predictor }}</td>
+              <td>{{ row.coef != null ? row.coef.toFixed(4) : '—' }}</td>
+              <td>{{ row.hr != null ? row.hr.toFixed(4) : '—' }}</td>
+              <td>{{ row.se != null ? row.se.toFixed(4) : '—' }}</td>
+              <td>{{ row.z != null ? row.z.toFixed(4) : '—' }}</td>
+              <td>{{ row.p != null ? row.p.toFixed(4) : '—' }}</td>
+              <td>{{ row.ci_lower != null ? `[${row.ci_lower.toFixed(4)}, ${row.ci_upper.toFixed(4)}]` : '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="cox-fit-card">
+          <span class="cox-fit-label">Concordance:</span>
+          <strong>{{ survivalData.cox.concordance.toFixed(4) }}</strong>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
            Time-series analysis
            ═══════════════════════════════════════════════════════════════════ -->
       <!-- Stationarity tests -->
@@ -865,6 +1106,153 @@ function newAnalysis() {
         </div>
       </div>
 
+      <!-- ═══════════════════════════════════════════════════════════════════
+           Mixed ANOVA
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div v-if="mixedAnovaData" class="section">
+        <h3 class="section-title">Mixed ANOVA: {{ result.test_name }}</h3>
+        <p class="result-meta">{{ mixedAnovaData.nSubjects }} subjects, {{ result.n_obs }} observations</p>
+
+        <!-- Sphericity test -->
+        <div v-if="mixedAnovaData.mauchly" class="section">
+          <div class="sphericity-card" :class="mixedAnovaData.mauchly.p_value > 0.05 ? 'test-pass' : 'test-amber'">
+            <div class="test-card-title">Mauchly's test of sphericity</div>
+            <div class="test-card-stat">W = {{ mixedAnovaData.mauchly.W.toFixed(4) }}, χ²({{ mixedAnovaData.mauchly.df }}) = {{ mixedAnovaData.mauchly.chi2.toFixed(2) }}, p = {{ mixedAnovaData.mauchly.p_value.toFixed(4) }}</div>
+            <div v-if="mixedAnovaData.mauchly.p_value < 0.05" class="test-card-stat">Greenhouse-Geisser ε = {{ mixedAnovaData.mauchly.eps_gg.toFixed(4) }}</div>
+            <div class="test-card-verdict">{{ mixedAnovaData.mauchly.p_value > 0.05 ? '✓ Sphericity assumed' : 'Sphericity violated' }}</div>
+          </div>
+        </div>
+
+        <!-- Effects table -->
+        <table class="data-table">
+          <thead>
+            <tr><th>Effect</th><th>F</th><th>df<sub>num</sub></th><th>df<sub>den</sub></th><th>p</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="e in mixedAnovaData.effects" :key="e.effect" :class="{ 'sig-row': e.p_value < 0.05 }">
+              <td class="group-name">{{ e.effect }}</td>
+              <td>{{ e.f_statistic.toFixed(3) }}</td>
+              <td>{{ e.df_num }}</td>
+              <td>{{ e.df_den }}</td>
+              <td>{{ e.p_value.toFixed(4) }}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- Cell descriptive stats -->
+        <div v-if="mixedAnovaData.cellStats.length" class="section">
+          <h4 class="subsection-title">Descriptive statistics per cell</h4>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th v-for="col in Object.keys(mixedAnovaData.cellStats[0])" :key="col">{{ col }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in mixedAnovaData.cellStats" :key="i">
+                <td v-for="(val, key) in row" :key="key">{{ val }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Post-hoc within -->
+        <div v-if="mixedAnovaData.postHocWithin?.length" class="section">
+          <h4 class="subsection-title">Post-hoc comparisons (within-subjects, Bonferroni)</h4>
+          <table class="data-table">
+            <thead>
+              <tr><th>Level 1</th><th>Level 2</th><th>Mean diff</th><th>t</th><th>p (adj)</th><th>Significant</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in mixedAnovaData.postHocWithin" :key="row.level1 + row.level2" :class="{ 'sig-row': row.reject }">
+                <td>{{ row.level1 }}</td><td>{{ row.level2 }}</td>
+                <td>{{ row.mean_diff.toFixed(4) }}</td><td>{{ row.t_stat.toFixed(4) }}</td>
+                <td>{{ row.p_adj.toFixed(4) }}</td><td>{{ row.reject ? '✓' : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Post-hoc between -->
+        <div v-if="mixedAnovaData.postHocBetween?.length" class="section">
+          <h4 class="subsection-title">Post-hoc comparisons (between-subjects, Bonferroni)</h4>
+          <table class="data-table">
+            <thead>
+              <tr><th>Group 1</th><th>Group 2</th><th>Mean diff</th><th>p (adj)</th><th>Significant</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in mixedAnovaData.postHocBetween" :key="row.group1 + row.group2" :class="{ 'sig-row': row.reject }">
+                <td>{{ row.group1 }}</td><td>{{ row.group2 }}</td>
+                <td>{{ row.mean_diff.toFixed(4) }}</td><td>{{ row.p_adj.toFixed(4) }}</td><td>{{ row.reject ? '✓' : '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           Confirmatory Factor Analysis
+           ═══════════════════════════════════════════════════════════════════ -->
+      <div v-if="cfaData" class="section">
+        <h3 class="section-title">CFA fit indices</h3>
+        <div v-if="!cfaData.converged" class="warning-banner">
+          ⚠ CFA model did not converge. Results may be unreliable.
+        </div>
+        <div class="fit-indices-grid">
+          <div class="fit-card" :class="cfaData.rmsea <= 0.05 ? 'fit-good' : cfaData.rmsea <= 0.08 ? 'fit-acceptable' : 'fit-poor'">
+            <div class="fit-card-label">RMSEA</div>
+            <div class="fit-card-value">{{ cfaData.rmsea.toFixed(3) }}</div>
+            <div class="fit-card-ci" v-if="cfaData.rmseaLower > 0">90% CI [{{ cfaData.rmseaLower.toFixed(3) }}, {{ cfaData.rmseaUpper.toFixed(3) }}]</div>
+          </div>
+          <div class="fit-card" :class="cfaData.cfi >= 0.95 ? 'fit-good' : cfaData.cfi >= 0.90 ? 'fit-acceptable' : 'fit-poor'">
+            <div class="fit-card-label">CFI</div>
+            <div class="fit-card-value">{{ cfaData.cfi.toFixed(3) }}</div>
+          </div>
+          <div class="fit-card" :class="cfaData.tli >= 0.95 ? 'fit-good' : cfaData.tli >= 0.90 ? 'fit-acceptable' : 'fit-poor'">
+            <div class="fit-card-label">TLI</div>
+            <div class="fit-card-value">{{ cfaData.tli.toFixed(3) }}</div>
+          </div>
+          <div class="fit-card" :class="cfaData.srmr <= 0.08 ? 'fit-good' : 'fit-poor'">
+            <div class="fit-card-label">SRMR</div>
+            <div class="fit-card-value">{{ cfaData.srmr.toFixed(3) }}</div>
+          </div>
+        </div>
+        <p class="chi2-display">χ²({{ cfaData.df }}) = {{ cfaData.chi2.toFixed(2) }}, p = {{ cfaData.pValue.toFixed(4) }}</p>
+
+        <!-- Loadings table -->
+        <div v-if="cfaData.loadings.length" class="section">
+          <h4 class="subsection-title">Standardized factor loadings</h4>
+          <table class="data-table">
+            <thead>
+              <tr><th>Indicator</th><th>Factor</th><th>Loading</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in cfaData.loadings" :key="row.indicator">
+                <td class="group-name">{{ row.indicator }}</td>
+                <td>{{ row.factor }}</td>
+                <td>{{ row.loading.toFixed(4) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Factor correlations -->
+        <div v-if="cfaData.factorCorrelations?.length" class="section">
+          <h4 class="subsection-title">Factor correlations</h4>
+          <table class="data-table">
+            <thead>
+              <tr><th>Factor 1</th><th>Factor 2</th><th>Correlation</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in cfaData.factorCorrelations" :key="row.factor1 + row.factor2">
+                <td>{{ row.factor1 }}</td><td>{{ row.factor2 }}</td>
+                <td>{{ row.correlation.toFixed(4) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Effect size -->
       <div v-if="result.effect_size" class="effect-size-section">
         <span class="effect-label">{{ result.effect_size.name }}:</span>
@@ -946,7 +1334,7 @@ function newAnalysis() {
 .history-item:hover { background: var(--color-surface); }
 .history-item.active { background: #ede9fe; color: var(--color-primary); font-weight: 600; }
 .signin-nudge { font-size: 11px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); padding-top: 10px; margin-top: auto; }
-.results-main { flex: 1; overflow-y: auto; padding: 32px; display: flex; flex-direction: column; gap: 24px; max-width: 860px; }
+.results-main { flex: 1; overflow-y: auto; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
 .result-title { font-size: 22px; }
 .result-meta { font-size: 13px; color: var(--color-text-muted); }
 
@@ -1191,4 +1579,30 @@ function newAnalysis() {
   border: 1px solid #fcd34d; border-radius: 6px;
   padding: 8px 12px; margin-bottom: 10px;
 }
+
+/* Survival */
+.survival-stats-grid { display: flex; gap: 12px; flex-wrap: wrap; }
+.test-card { flex: 1; min-width: 160px; padding: 12px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); }
+.test-card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: 4px; }
+.test-card-stat { font-size: 13px; color: var(--color-text); }
+.test-card-verdict { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.chart-wrapper { height: 320px; padding: 12px 0; }
+.warning-banner { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+.cox-fit-card { margin-top: 10px; padding: 8px 12px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px; font-size: 13px; }
+.cox-fit-label { color: var(--color-text-muted); }
+
+/* Mixed ANOVA */
+.subsection-title { font-size: 13px; font-weight: 600; color: var(--color-text-muted); margin: 0 0 8px; }
+.sphericity-card { padding: 12px; border-radius: 8px; border: 1px solid var(--color-border); margin-bottom: 12px; }
+
+/* CFA */
+.fit-indices-grid { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.fit-card { flex: 1; min-width: 120px; padding: 14px; border-radius: 8px; border: 1px solid var(--color-border); text-align: center; }
+.fit-card-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: 4px; }
+.fit-card-value { font-size: 24px; font-weight: 700; }
+.fit-card-ci { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+.fit-good { border-color: #86efac; background: #f0fdf4; }
+.fit-acceptable { border-color: #fcd34d; background: #fffbeb; }
+.fit-poor { border-color: #fca5a5; background: #fef2f2; }
+.chi2-display { font-size: 13px; color: var(--color-text-muted); margin: 0 0 12px; }
 </style>

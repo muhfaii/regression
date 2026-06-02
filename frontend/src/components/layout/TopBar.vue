@@ -12,7 +12,7 @@ const results = useResultsStore()
 
 const tabs = computed(() => [
   { label: 'Data', path: '/data' },
-  { label: 'Analyse', path: '/home' },
+  { label: 'Analysis', path: '/home' },
   ...(results.hasAnyResult ? [{ label: 'Results', path: '/results' }] : []),
 ])
 
@@ -33,7 +33,7 @@ function isActive(path: string) {
 <template>
   <header class="topbar">
     <div class="topbar-left">
-      <span class="logo">StatAssist</span>
+      <span class="logo">Infera</span>
     </div>
     <nav class="topbar-nav" role="navigation" aria-label="Primary">
       <button

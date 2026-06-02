@@ -27,7 +27,7 @@ async function handleImport() {
 
 <template>
   <div class="paste-import">
-    <label class="paste-label">Paste tab-separated or CSV data</label>
+    <label class="paste-label">Paste your data (from a spreadsheet or CSV file)</label>
     <textarea
       v-model="text"
       class="paste-area"

@@ -25,7 +25,7 @@ function handleOverride(column: string, event: Event) {
 
 <template>
   <div v-if="conflicts.length" class="conflict-banner" role="alert">
-    <p class="banner-title">Type conflict — fix before running</p>
+    <p class="banner-title">Column type needs adjustment</p>
     <div v-for="c in conflicts" :key="c.slot + c.column" class="conflict-row">
       <span class="conflict-label">
         <strong>{{ c.column }}</strong> needs to be
