@@ -265,15 +265,37 @@ export const TEST_CATALOG: TestDefinition[] = [
     ],
   },
 
-  // ── Advanced (coming soon) ─────────────────────────────────────────────────
+  // ── Psychometrics ────────────────────────────────────────────────────────────
+  {
+    key: 'cfa',
+    name: 'Confirmatory Factor Analysis',
+    category: 'Psychometrics',
+    descriptor: 'latent structure, CFA',
+    tooltip: 'Tests a pre-specified factor structure using confirmatory factor analysis with ML estimation.',
+    slots: [
+      { key: 'indicators', label: 'Indicator variables', required_type: 'continuous', multiple: true },
+    ],
+    extras_fields: [
+      { key: 'n_factors', label: 'Number of factors', type: 'number', default: 1 },
+    ],
+  },
+
+  // ── Advanced ───────────────────────────────────────────────────────────────
   {
     key: 'mixed_anova',
     name: 'Mixed ANOVA',
     category: 'Advanced',
     descriptor: 'between + within factors',
     tooltip: 'Analyses designs with both between-subjects and within-subjects factors.',
-    slots: [],
-    coming_soon: true,
+    slots: [
+      { key: 'outcome', label: 'Outcome variable', required_type: 'continuous', multiple: false },
+      { key: 'within_factor', label: 'Within-subjects factor', required_type: 'categorical', multiple: false },
+      { key: 'subject_id', label: 'Subject identifier', required_type: 'any', multiple: false },
+      { key: 'between_factor', label: 'Between-subjects factor (optional)', required_type: 'categorical', multiple: false },
+    ],
+    extras_fields: [
+      { key: 'post_hoc', label: 'Post-hoc comparisons', type: 'boolean', default: true },
+    ],
   },
   {
     key: 'sem',

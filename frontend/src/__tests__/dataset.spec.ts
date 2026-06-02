@@ -1,9 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useDatasetStore } from '../stores/dataset'
 import type { DatasetPreview } from '../types/dataset'
-
-const STORAGE_KEY = 'ra_dataset'
 
 const mockPreview: DatasetPreview = {
   session_id: 'sess-1',
@@ -19,73 +17,44 @@ const mockPreview: DatasetPreview = {
 
 beforeEach(() => {
   setActivePinia(createPinia())
-  sessionStorage.clear()
-  vi.restoreAllMocks()
 })
 
 describe('useDatasetStore', () => {
-  it('load() writes to sessionStorage', () => {
+  it('load() sets filename, rowCount, columns, and datasetContext', () => {
     const store = useDatasetStore()
     store.load(mockPreview)
 
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    expect(raw).not.toBeNull()
-    const parsed = JSON.parse(raw!)
-    expect(parsed.filename).toBe('test.csv')
-    expect(parsed.rowCount).toBe(100)
-    expect(parsed.expiry).toBeGreaterThan(Date.now())
+    expect(store.filename).toBe('test.csv')
+    expect(store.rowCount).toBe(100)
+    expect(store.columns).toHaveLength(2)
+    expect(store.datasetContext).toBe('generic')
+    expect(store.isLoaded).toBe(true)
   })
 
-  it('restoreDataset() restores filename, rowCount, columns, and datasetContext', () => {
-    const store = useDatasetStore()
-    store.load(mockPreview)
-
-    setActivePinia(createPinia())
-    const freshStore = useDatasetStore()
-    const restored = freshStore.restoreDataset()
-
-    expect(restored).toBe(true)
-    expect(freshStore.filename).toBe('test.csv')
-    expect(freshStore.rowCount).toBe(100)
-    expect(freshStore.columns).toHaveLength(2)
-    expect(freshStore.datasetContext).toBe('generic')
-    expect(freshStore.isLoaded).toBe(true)
-  })
-
-  it('overrideColumnType() persists override; restoreDataset restores it', () => {
+  it('overrideColumnType() overrides effective type', () => {
     const store = useDatasetStore()
     store.load(mockPreview)
     store.overrideColumnType('age', 'ordinal')
 
-    setActivePinia(createPinia())
-    const freshStore = useDatasetStore()
-    freshStore.restoreDataset()
-
-    expect(freshStore.effectiveColumnType('age')).toBe('ordinal')
+    expect(store.effectiveColumnType('age')).toBe('ordinal')
   })
 
-  it('restoreDataset() returns false and clears when expired', () => {
+  it('clearDataset() resets all state', () => {
     const store = useDatasetStore()
     store.load(mockPreview)
-
-    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31 * 60 * 1000)
-
-    setActivePinia(createPinia())
-    const freshStore = useDatasetStore()
-    const restored = freshStore.restoreDataset()
-
-    expect(restored).toBe(false)
-    expect(freshStore.isLoaded).toBe(false)
-    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull()
-  })
-
-  it('clearDataset() removes sessionStorage key', () => {
-    const store = useDatasetStore()
-    store.load(mockPreview)
-    expect(sessionStorage.getItem(STORAGE_KEY)).not.toBeNull()
+    expect(store.isLoaded).toBe(true)
 
     store.clearDataset()
     expect(store.isLoaded).toBe(false)
-    expect(sessionStorage.getItem(STORAGE_KEY)).toBeNull()
+    expect(store.filename).toBeNull()
+    expect(store.columns).toHaveLength(0)
+  })
+
+  it('effectiveColumnType returns inferred type when no override set', () => {
+    const store = useDatasetStore()
+    store.load(mockPreview)
+
+    expect(store.effectiveColumnType('age')).toBe('continuous')
+    expect(store.effectiveColumnType('group')).toBe('categorical')
   })
 })

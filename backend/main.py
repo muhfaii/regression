@@ -2,14 +2,25 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.routers import analysis, data, export
+from backend.database import init_db
+from backend.routers import analysis, auth, conversations, data, export
 from backend.services.session_store import cleanup_loop
 
-app = FastAPI(title="Statistical Analysis API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    cleanup_task = asyncio.create_task(cleanup_loop())
+    yield
+    cleanup_task.cancel()
+
+
+app = FastAPI(title="Statistical Analysis API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,11 +33,8 @@ app.add_middleware(
 app.include_router(data.router)
 app.include_router(analysis.router)
 app.include_router(export.router)
-
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(cleanup_loop())
+app.include_router(auth.router)
+app.include_router(conversations.router)
 
 
 @app.get("/health")

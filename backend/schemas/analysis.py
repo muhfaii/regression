@@ -17,6 +17,7 @@ class RunRequest(BaseModel):
     test_key: str
     config: dict  # variable slot assignments, e.g. {"dep_var": "wage", "indep_vars": ["edu"]}
     options: AnalysisOptions = AnalysisOptions()
+    conversation_id: str | None = None  # if provided, persist result as a message
 
 
 class ValidateConfigRequest(BaseModel):

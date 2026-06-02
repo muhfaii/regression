@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import FileDropZone from '../components/data-import/FileDropZone.vue'
 import PasteImport from '../components/data-import/PasteImport.vue'
 import SampleDataGrid from '../components/data-import/SampleDataGrid.vue'
@@ -16,6 +17,9 @@ const router = useRouter()
 const dataset = useDatasetStore()
 const session = useSessionStore()
 const api = useApi()
+const auth = useAuthStore()
+
+const conversationId = computed(() => route.query.conversation_id as string | undefined)
 
 type Tab = 'upload' | 'paste' | 'samples'
 const activeTab = ref<Tab>('upload')
@@ -50,7 +54,7 @@ async function handleFile(file: File) {
     loading.value = true
     error.value = null
     try {
-      const data: DatasetPreview = await api.uploadFile(file)
+      const data: DatasetPreview = await api.uploadFile(file, conversationId.value)
       await applyPreview(data)
     } catch (e: any) {
       error.value = e.message ?? 'Upload failed.'
@@ -95,8 +99,26 @@ function handleTypeChange(colName: string, type: ColumnType) {
   }
 }
 
-function proceed() {
-  router.push('/home')
+async function proceed() {
+  const cid = conversationId.value
+  if (cid) {
+    // Add welcome message and redirect to conversation
+    await fetch(`/api/conversations/${cid}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
+      body: JSON.stringify({
+        role: 'assistant',
+        content_type: 'text',
+        payload: {
+          text: `Dataset "${preview.value?.filename ?? 'data'}" has been loaded. What would you like to do?`,
+          actions: ['guide', 'browse'],
+        },
+      }),
+    }).catch(() => {})
+    router.push(`/conversations/${cid}`)
+  } else {
+    router.push('/home')
+  }
 }
 
 function reset() {
@@ -133,8 +155,8 @@ function reset() {
 
         <div class="tab-panel">
           <FileDropZone v-if="activeTab === 'upload'" @file="handleFile" />
-          <PasteImport v-else-if="activeTab === 'paste'" @imported="handlePasted" />
-          <SampleDataGrid v-else @imported="handleSample" />
+          <PasteImport v-else-if="activeTab === 'paste'" :conversation-id="conversationId" @imported="handlePasted" />
+          <SampleDataGrid v-else :conversation-id="conversationId" @imported="handleSample" />
         </div>
 
         <div v-if="loading" class="status-msg">Parsing file…</div>

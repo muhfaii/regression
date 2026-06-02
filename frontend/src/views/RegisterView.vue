@@ -1,0 +1,155 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
+
+const router = useRouter()
+const auth = useAuthStore()
+
+const email = ref('')
+const password = ref('')
+const confirmPassword = ref('')
+const displayName = ref('')
+const error = ref<string | null>(null)
+const loading = ref(false)
+
+const passwordsMatch = computed(() => password.value === confirmPassword.value)
+
+async function handleRegister() {
+  if (!passwordsMatch.value) {
+    error.value = 'Passwords do not match'
+    return
+  }
+  if (password.value.length < 4) {
+    error.value = 'Password must be at least 4 characters'
+    return
+  }
+  error.value = null
+  loading.value = true
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: email.value,
+        password: password.value,
+        display_name: displayName.value,
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      throw new Error(body.detail ?? 'Registration failed')
+    }
+    const data = await res.json()
+    auth.setAuth(data.access_token, data.user)
+    router.push('/dashboard')
+  } catch (e: any) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="auth-view">
+    <div class="auth-card">
+      <h1 class="auth-title">Create your account</h1>
+      <p class="auth-sub">Start analyzing data with Infera.</p>
+
+      <form class="auth-form" @submit.prevent="handleRegister">
+        <label class="field">
+          <span class="field-label">Email</span>
+          <input v-model="email" type="email" class="field-input" placeholder="you@example.com" required autocomplete="email" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Display name</span>
+          <input v-model="displayName" type="text" class="field-input" placeholder="Optional" autocomplete="name" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Password</span>
+          <input v-model="password" type="password" class="field-input" placeholder="At least 4 characters" required autocomplete="new-password" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Confirm password</span>
+          <input
+            v-model="confirmPassword"
+            type="password"
+            class="field-input"
+            :class="{ 'input-mismatch': confirmPassword && !passwordsMatch }"
+            placeholder="Repeat your password"
+            required
+            autocomplete="new-password"
+          />
+        </label>
+
+        <div v-if="error" class="error-msg" role="alert">{{ error }}</div>
+
+        <button type="submit" class="btn-primary" :disabled="loading" :aria-busy="loading">
+          {{ loading ? 'Creating account…' : 'Create account' }}
+        </button>
+      </form>
+
+      <p class="auth-alt">
+        Already have an account?
+        <router-link to="/login" class="auth-link">Sign in</router-link>
+      </p>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.auth-view {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - var(--topbar-h));
+  padding: 48px 24px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+}
+.auth-title { font-size: 22px; margin-bottom: 6px; }
+.auth-sub { color: var(--color-text-muted); margin-bottom: 28px; }
+.auth-form { display: flex; flex-direction: column; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.field-input {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: var(--color-bg);
+  transition: border-color 0.15s;
+}
+.field-input:focus { outline: 2px solid var(--color-primary); outline-offset: -1px; }
+.input-mismatch { border-color: var(--color-red); }
+.error-msg {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: var(--color-red);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+  width: 100%;
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-alt { text-align: center; font-size: 13px; color: var(--color-text-muted); margin-top: 24px; }
+.auth-link { color: var(--color-primary); font-weight: 600; text-decoration: none; }
+.auth-link:hover { text-decoration: underline; }
+</style>

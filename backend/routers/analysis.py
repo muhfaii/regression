@@ -5,12 +5,14 @@ from fastapi import APIRouter, HTTPException
 
 from backend.analysis_modules import (
     anova,
+    cfa,
     chi_square,
     correlation,
     descriptive,
     factor_analysis,
     logistic,
     mediation,
+    mixed_anova,
     moderation,
     nonparametric,
     panel,
@@ -62,6 +64,8 @@ _RUNNERS = {
     "timeseries": timeseries.run,
     "factor_analysis": factor_analysis.run,
     "survival_analysis": survival.run,
+    "mixed_anova": mixed_anova.run,
+    "cfa": cfa.run,
 }
 
 # Slot type requirements — mirrors TEST_CATALOG in frontend/src/constants/tests.ts
@@ -85,6 +89,8 @@ _SLOT_TYPES: dict[str, dict[str, str]] = {
     "timeseries": {"value": "continuous", "time_col": "any", "group_by": "categorical"},
     "factor_analysis": {"variables": "continuous"},
     "survival_analysis": {"duration": "continuous", "event": "categorical", "predictors": "any", "group": "categorical"},
+    "mixed_anova": {"outcome": "continuous", "within_factor": "categorical", "subject_id": "any", "between_factor": "categorical"},
+    "cfa": {"indicators": "continuous"},
 }
 
 
@@ -106,6 +112,10 @@ async def run_analysis(req: RunRequest) -> AnalysisResult:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}")
 
     session_store.save_result(req.session_id, result.result_id, result.__dict__)
+
+    # Persist result as conversation message when linked
+    if req.conversation_id:
+        await session_store.persist_result_to_db(req.session_id, result.result_id)
 
     return AnalysisResult(
         result_id=result.result_id,

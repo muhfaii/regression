@@ -12,3 +12,6 @@ dist/
 # Build artifacts
 frontend/src/**/*.js
 .claude/
+
+# SQLite database files
+data/

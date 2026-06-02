@@ -23,3 +23,4 @@ class DatasetPreview(BaseModel):
     columns: list[ColumnInfo]
     dataset_context: Literal["survey", "generic"]
     warnings: list[str]
+    conversation_id: str | None = None

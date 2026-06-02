@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useApi } from '../../composables/useApi'
 
+const props = defineProps<{ conversationId?: string }>()
 const emit = defineEmits<{ (e: 'imported', data: unknown): void }>()
 
 const api = useApi()
@@ -15,7 +16,7 @@ async function handleImport() {
   loading.value = true
   error.value = null
   try {
-    const data = await api.pasteData(trimmed)
+    const data = await api.pasteData(trimmed, props.conversationId)
     emit('imported', data)
   } catch (e: any) {
     error.value = e.message ?? 'Import failed.'

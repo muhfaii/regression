@@ -5,11 +5,13 @@ import pytest
 
 from backend.analysis_modules import (
     anova,
+    cfa,
     chi_square,
     correlation,
     descriptive,
     factor_analysis,
     logistic,
+    mixed_anova,
     moderation,
     multicomp,
     nonparametric,
@@ -885,6 +887,123 @@ def test_survival_no_group(survival_df):
 # Interpretation fields present on all modules
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Mixed ANOVA
+# ---------------------------------------------------------------------------
+
+class _MaOpts:
+    assumption_checks = True
+    effect_size = False
+    post_hoc = True
+    extras = {}
+
+
+@pytest.fixture
+def mixed_anova_df():
+    """2×2 mixed design: within (time) × between (treatment)."""
+    rng = np.random.default_rng(42)
+    subjects_a = list(range(20))
+    subjects_b = list(range(20, 40))
+    rows = []
+    for sid in subjects_a:
+        rows.append({"subject": sid, "time": "pre", "score": rng.normal(50, 10), "treatment": "ctrl"})
+        rows.append({"subject": sid, "time": "post", "score": rng.normal(52, 10), "treatment": "ctrl"})
+    for sid in subjects_b:
+        rows.append({"subject": sid, "time": "pre", "score": rng.normal(50, 10), "treatment": "treat"})
+        rows.append({"subject": sid, "time": "post", "score": rng.normal(58, 10), "treatment": "treat"})
+    return pd.DataFrame(rows)
+
+
+def test_mixed_anova_within_only(mixed_anova_df):
+    """Within-subjects only (no between factor)."""
+    result = mixed_anova.run(mixed_anova_df, {
+        "outcome": "score", "within_factor": "time", "subject_id": "subject",
+    }, OPTS)
+    assert result.test_key == "mixed_anova"
+    assert len(result.statistics["effects"]) == 1
+    assert result.statistics["effects"][0]["effect"] == "time"
+    assert result.statistics["n_subjects"] == 40
+
+
+def test_mixed_anova_between_within(mixed_anova_df):
+    """Full 2×2 design with between and within factors."""
+    result = mixed_anova.run(mixed_anova_df, {
+        "outcome": "score", "within_factor": "time", "subject_id": "subject",
+        "between_factor": "treatment",
+    }, OPTS)
+    assert result.test_key == "mixed_anova"
+    assert len(result.statistics["effects"]) >= 2
+    assert result.statistics["has_between"] is True
+    assert result.statistics["between_factor"] == "treatment"
+
+
+def test_mixed_anova_missing_config():
+    with pytest.raises(ValueError, match="outcome, within_factor, and subject_id"):
+        mixed_anova.run(pd.DataFrame({"x": [1]}), {}, OPTS)
+
+
+# ---------------------------------------------------------------------------
+# CFA
+# ---------------------------------------------------------------------------
+
+class _CfaOpts:
+    assumption_checks = True
+    effect_size = False
+    post_hoc = False
+    extras = {}
+
+
+@pytest.fixture
+def cfa_df():
+    """3-factor CFA data (9 items, 3 per factor) with known structure."""
+    rng = np.random.default_rng(42)
+    n = 200
+    f1 = rng.normal(0, 1, n)
+    f2 = rng.normal(0, 1, n)
+    f3 = rng.normal(0, 1, n)
+    data = {}
+    for i in range(1, 4):
+        data[f"x{i}"] = 0.8 * f1 + rng.normal(0, 0.6, n)
+    for i in range(4, 7):
+        data[f"x{i}"] = 0.8 * f2 + rng.normal(0, 0.6, n)
+    for i in range(7, 10):
+        data[f"x{i}"] = 0.8 * f3 + rng.normal(0, 0.6, n)
+    return pd.DataFrame(data)
+
+
+def test_cfa_smoke(cfa_df):
+    opts = _CfaOpts()
+    opts.extras = {"n_factors": 3}
+    result = cfa.run(cfa_df, {"indicators": list(cfa_df.columns)}, opts)
+    assert result.test_key == "cfa"
+    assert result.statistics["n_factors"] == 3
+    assert result.statistics["n_indicators"] == 9
+    assert result.statistics["cfi"] > 0.5
+    assert len(result.statistics["loadings"]) == 9
+    assert result.statistics["converged"] is True
+
+
+def test_cfa_too_few_indicators():
+    opts = _CfaOpts()
+    opts.extras = {"n_factors": 2}
+    with pytest.raises(ValueError, match="At least 4 indicator"):
+        cfa.run(pd.DataFrame({"a": [1, 2], "b": [3, 4], "c": [5, 6]}), {"indicators": ["a", "b", "c"]}, opts)
+
+
+def test_cfa_interpretation_fields(cfa_df):
+    opts = _CfaOpts()
+    opts.extras = {"n_factors": 3}
+    result = cfa.run(cfa_df, {"indicators": list(cfa_df.columns)}, opts)
+    assert result.interpretation.plain
+    assert result.interpretation.apa
+    assert result.interpretation.technical
+    assert result.result_id
+
+
+# ---------------------------------------------------------------------------
+# Interpretation fields present on all modules
+# ---------------------------------------------------------------------------
+
 @pytest.mark.parametrize("result_fn,args", [
     (lambda df: descriptive.run(df, {"variables": ["score"]}, OPTS), "continuous_df"),
     (lambda df: t_tests.run_independent_t(df, {"outcome": "score", "group": "group2"}, OPTS), "continuous_df"),
@@ -901,10 +1020,12 @@ def test_survival_no_group(survival_df):
     (lambda df: timeseries.run(df, {"value": "value", "time_col": "date"}, _TsOpts()), "ts_stationary"),
     (lambda df: factor_analysis.run(df, {"variables": list(df.columns)}, _FaOpts()), "fa_known_df"),
     (lambda df: survival.run(df, {"duration": "duration", "event": "event"}, OPTS), "survival_df"),
+    (lambda df: mixed_anova.run(df, {"outcome": "score", "within_factor": "time", "subject_id": "subject"}, OPTS), "mixed_anova_df"),
+    (lambda df: cfa.run(df, {"indicators": list(df.columns)}, _CfaOpts()), "cfa_df"),
 ])
 
-def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df, likert_df, ts_stationary, fa_known_df, survival_df):
-    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df, "likert_df": likert_df, "ts_stationary": ts_stationary, "fa_known_df": fa_known_df, "survival_df": survival_df}
+def test_interpretation_fields(result_fn, args, continuous_df, categorical_df, panel_df, likert_df, ts_stationary, fa_known_df, survival_df, mixed_anova_df, cfa_df):
+    m = {"continuous_df": continuous_df, "categorical_df": categorical_df, "panel_df": panel_df, "likert_df": likert_df, "ts_stationary": ts_stationary, "fa_known_df": fa_known_df, "survival_df": survival_df, "mixed_anova_df": mixed_anova_df, "cfa_df": cfa_df}
     df = m[args]
     result = result_fn(df)
     assert result.interpretation.plain

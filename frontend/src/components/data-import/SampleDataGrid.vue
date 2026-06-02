@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useApi } from '../../composables/useApi'
 
+const props = defineProps<{ conversationId?: string }>()
 const emit = defineEmits<{ (e: 'imported', data: unknown): void }>()
 
 const api = useApi()
@@ -21,7 +22,7 @@ async function loadSample(id: string) {
   loadingId.value = id
   error.value = null
   try {
-    const data = await api.loadSample(id)
+    const data = await api.loadSample(id, props.conversationId)
     emit('imported', data)
   } catch (e: any) {
     error.value = e.message ?? 'Failed to load sample.'

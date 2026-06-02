@@ -16,6 +16,20 @@ from regassist.ingest import load_file
 
 router = APIRouter(prefix="/api/data", tags=["data"])
 
+
+def _build_preview(df, ingest, filename, session_id, conversation_id=None):
+    columns = column_inference.infer_columns(df, ingest.columns)
+    context = dataset_context.infer_context(columns)
+    return DatasetPreview(
+        session_id=session_id,
+        filename=filename,
+        row_count=ingest.row_count,
+        columns=columns,
+        dataset_context=context,
+        warnings=ingest.warnings,
+        conversation_id=conversation_id,
+    )
+
 _SAMPLE_DIR = Path(__file__).parent.parent.parent / "sample_data"
 _SAMPLES = {
     "clean_wages": {"label": "Clean Wages", "file": "clean_wages.csv", "description": "Wage data for OLS regression"},
@@ -26,14 +40,13 @@ _SAMPLES = {
 
 
 @router.post("/upload", response_model=DatasetPreview)
-async def upload_file(file: UploadFile) -> DatasetPreview:
+async def upload_file(file: UploadFile, conversation_id: str | None = None) -> DatasetPreview:
     raw = await file.read()
     filename = file.filename or "upload"
 
     try:
         if filename.lower().endswith(".sav"):
             df, _ = pyreadstat.read_sav(io.BytesIO(raw))
-            # Build a minimal IngestResult-compatible response
             from regassist.ingest import ColumnInfo as IngestColumnInfo, IngestResult
             cols = [
                 IngestColumnInfo(
@@ -51,27 +64,16 @@ async def upload_file(file: UploadFile) -> DatasetPreview:
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    columns = column_inference.infer_columns(df, ingest.columns)
-    context = dataset_context.infer_context(columns)
-    session_id = session_store.create_session(df, filename)
-
-    return DatasetPreview(
-        session_id=session_id,
-        filename=filename,
-        row_count=ingest.row_count,
-        columns=columns,
-        dataset_context=context,
-        warnings=ingest.warnings,
-    )
+    session_id = session_store.create_session(df, filename, conversation_id=conversation_id)
+    return _build_preview(df, ingest, filename, session_id, conversation_id)
 
 
 @router.post("/paste", response_model=DatasetPreview)
-async def paste_data(body: dict) -> DatasetPreview:
+async def paste_data(body: dict, conversation_id: str | None = None) -> DatasetPreview:
     text = body.get("text", "")
     if not text.strip():
         raise HTTPException(status_code=422, detail="No text provided.")
 
-    # Detect delimiter: prefer tab if more tabs than commas per line
     lines = text.strip().splitlines()
     tab_count = sum(l.count("\t") for l in lines[:5])
     comma_count = sum(l.count(",") for l in lines[:5])
@@ -96,18 +98,8 @@ async def paste_data(body: dict) -> DatasetPreview:
         for c in df.columns
     ]
     ingest = IngestResult(df=df, row_count=len(df), columns=cols)
-    columns = column_inference.infer_columns(df, ingest.columns)
-    context = dataset_context.infer_context(columns)
-    session_id = session_store.create_session(df, "pasted_data.csv")
-
-    return DatasetPreview(
-        session_id=session_id,
-        filename="pasted_data.csv",
-        row_count=len(df),
-        columns=columns,
-        dataset_context=context,
-        warnings=ingest.warnings,
-    )
+    session_id = session_store.create_session(df, "pasted_data.csv", conversation_id=conversation_id)
+    return _build_preview(df, ingest, "pasted_data.csv", session_id, conversation_id)
 
 
 @router.get("/samples")
@@ -120,7 +112,7 @@ async def list_samples() -> list[dict]:
 
 
 @router.get("/samples/{sample_id}", response_model=DatasetPreview)
-async def load_sample(sample_id: str) -> DatasetPreview:
+async def load_sample(sample_id: str, conversation_id: str | None = None) -> DatasetPreview:
     if sample_id not in _SAMPLES:
         raise HTTPException(status_code=404, detail="Sample not found.")
 
@@ -135,15 +127,5 @@ async def load_sample(sample_id: str) -> DatasetPreview:
         raise HTTPException(status_code=422, detail=str(exc))
 
     df = ingest.df
-    columns = column_inference.infer_columns(df, ingest.columns)
-    context = dataset_context.infer_context(columns)
-    session_id = session_store.create_session(df, sample["file"])
-
-    return DatasetPreview(
-        session_id=session_id,
-        filename=sample["file"],
-        row_count=ingest.row_count,
-        columns=columns,
-        dataset_context=context,
-        warnings=ingest.warnings,
-    )
+    session_id = session_store.create_session(df, sample["file"], conversation_id=conversation_id)
+    return _build_preview(df, ingest, sample["file"], session_id, conversation_id)
