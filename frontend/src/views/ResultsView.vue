@@ -439,6 +439,29 @@ function newAnalysis() {
       <h1 class="result-title">{{ result.test_name }}</h1>
       <p class="result-meta">N = {{ result.n_obs }}</p>
 
+      <!-- Interpretation tabs (plain-language summary first, technical detail below) -->
+      <div class="interpretation-section">
+        <h3 class="section-title">Interpretation</h3>
+        <div class="tabs" role="tablist">
+          <button
+            v-for="[key, label] in ([['plain', 'Plain English'], ['apa', 'APA 7'], ['technical', 'Technical']] as [string, string][])"
+            :key="key"
+            class="tab-btn"
+            :class="{ active: activeTab === key }"
+            role="tab"
+            :aria-selected="activeTab === key"
+            @click="activeTab = key as 'plain' | 'apa' | 'technical'"
+          >
+            {{ label }}
+          </button>
+        </div>
+        <div class="tab-content">
+          <p v-if="activeTab === 'plain'">{{ result.interpretation.plain }}</p>
+          <p v-if="activeTab === 'apa'" class="apa-text">{{ result.interpretation.apa }}</p>
+          <p v-if="activeTab === 'technical'" class="mono-text">{{ result.interpretation.technical }}</p>
+        </div>
+      </div>
+
       <!-- Headline stat cards (scalars only) -->
       <div v-if="scalarCards(result.statistics).length" class="stats-cards">
         <div
@@ -1275,29 +1298,6 @@ function newAnalysis() {
             <div class="check-detail">{{ check.detail }}</div>
             <div v-if="check.fix_suggestion" class="check-fix">{{ check.fix_suggestion }}</div>
           </div>
-        </div>
-      </div>
-
-      <!-- Interpretation tabs -->
-      <div class="interpretation-section">
-        <h3 class="section-title">Interpretation</h3>
-        <div class="tabs" role="tablist">
-          <button
-            v-for="[key, label] in ([['plain', 'Plain English'], ['apa', 'APA 7'], ['technical', 'Technical']] as [string, string][])"
-            :key="key"
-            class="tab-btn"
-            :class="{ active: activeTab === key }"
-            role="tab"
-            :aria-selected="activeTab === key"
-            @click="activeTab = key as 'plain' | 'apa' | 'technical'"
-          >
-            {{ label }}
-          </button>
-        </div>
-        <div class="tab-content">
-          <p v-if="activeTab === 'plain'">{{ result.interpretation.plain }}</p>
-          <p v-if="activeTab === 'apa'" class="apa-text">{{ result.interpretation.apa }}</p>
-          <p v-if="activeTab === 'technical'" class="mono-text">{{ result.interpretation.technical }}</p>
         </div>
       </div>
 
