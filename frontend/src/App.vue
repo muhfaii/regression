@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import TopBar from './components/layout/TopBar.vue'
+import WorkflowSteps from './components/layout/WorkflowSteps.vue'
 </script>
 
 <template>
   <div class="app-shell">
     <TopBar />
+    <WorkflowSteps />
     <main class="app-main">
       <Transition name="fade" mode="out-in">
         <RouterView />

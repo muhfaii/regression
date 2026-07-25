@@ -10,6 +10,7 @@ const email = ref('')
 const password = ref('')
 const error = ref<string | null>(null)
 const loading = ref(false)
+const showPassword = ref(false)
 
 async function handleLogin() {
   error.value = null
@@ -56,14 +57,19 @@ async function handleLogin() {
 
         <label class="field">
           <span class="field-label">Password</span>
-          <input
-            v-model="password"
-            type="password"
-            class="field-input"
-            placeholder="Enter your password"
-            required
-            autocomplete="current-password"
-          />
+          <div class="password-wrap">
+            <input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              class="field-input"
+              placeholder="Enter your password"
+              required
+              autocomplete="current-password"
+            />
+            <button type="button" class="password-toggle" @click="showPassword = !showPassword">
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
         </label>
 
         <div v-if="error" class="error-msg" role="alert">{{ error }}</div>
@@ -107,6 +113,22 @@ async function handleLogin() {
   transition: border-color 0.15s;
 }
 .field-input:focus { outline: 2px solid var(--color-primary); outline-offset: -1px; }
+.password-wrap { position: relative; display: flex; }
+.password-wrap .field-input { flex: 1; padding-right: 52px; }
+.password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.password-toggle:hover { color: var(--color-text); }
 .error-msg {
   background: #fef2f2;
   border: 1px solid #fecaca;

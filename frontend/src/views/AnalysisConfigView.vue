@@ -177,6 +177,7 @@ async function runAnalysis() {
             {{ col.name }} ({{ effectiveType(col.name) }})
           </option>
         </select>
+        <p v-if="slot.multiple" class="multi-select-hint">Hold Ctrl (Windows) or Cmd (Mac) and click to select multiple variables.</p>
 
         <!-- Single select -->
         <select
@@ -314,6 +315,7 @@ async function runAnalysis() {
 }
 .var-select:focus { outline: 2px solid var(--color-primary); }
 .var-select.single { height: 36px; }
+.multi-select-hint { font-size: 12px; color: var(--color-text-muted); margin: 0; }
 .options { display: flex; flex-direction: column; gap: 10px; }
 .option-toggle {
   display: flex;
