@@ -11,5 +11,7 @@ app.use(router)
 app.mount('#app')
 
 import { useAuthStore } from './stores/auth'
+import { useThemeStore } from './stores/theme'
 const auth = useAuthStore()
 auth.restore()
+useThemeStore().restore()

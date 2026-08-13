@@ -160,7 +160,7 @@ onMounted(async () => {
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--color-primary);
-  background: #ede9fe;
+  background: var(--color-accent-tint);
   border-radius: 99px;
   padding: 2px 10px;
   width: fit-content;
@@ -198,9 +198,9 @@ onMounted(async () => {
   font-size: 13px;
   border: 1px solid transparent;
 }
-.check-pass { background: var(--color-green-bg); border-color: #bbf7d0; }
-.check-amber { background: var(--color-amber-bg); border-color: #fde68a; }
-.check-fail { background: #fef2f2; border-color: #fecaca; }
+.check-pass { background: var(--color-green-bg); border-color: var(--color-green-border); }
+.check-amber { background: var(--color-amber-bg); border-color: var(--color-amber-border); }
+.check-fail { background: var(--color-red-bg); border-color: var(--color-red-border); }
 .check-icon { font-weight: 700; font-size: 14px; flex-shrink: 0; }
 .check-pass .check-icon { color: var(--color-green); }
 .check-amber .check-icon { color: var(--color-amber); }
