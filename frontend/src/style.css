@@ -1,27 +1,93 @@
 /* Design tokens */
 :root {
-  --color-bg: #ffffff;
-  --color-surface: #f9fafb;
-  --color-border: #e5e7eb;
-  --color-text: #111827;
-  --color-text-muted: #6b7280;
-  --color-primary: #4f46e5;
-  --color-primary-hover: #4338ca;
-  --color-amber: #d97706;
-  --color-amber-bg: #fffbeb;
-  --color-green: #16a34a;
-  --color-green-bg: #f0fdf4;
-  --color-red: #dc2626;
+  /* Brand */
+  --color-logo-dark: #1b1b1b;
+  --color-logo-light: #efefec;
+  --color-accent: #e8a44a;
+  --color-accent-hover: #d4923a;
+  --color-accent-tint: #e8a44a1a;
+
+  /* Surfaces (dark mode, default) */
+  --surface-0: #141414;
+  --surface-1: #1b1b1b;
+  --surface-2: #222222;
+  --surface-3: #2a2a2a;
+  --surface-4: #333333;
+  --color-border: #2e2e2e;
+  --color-border-subtle: #242424;
+  --color-text: #efefec;
+  --color-text-secondary: #a8a8a3;
+  --color-text-muted: #6b6b66;
+
+  /* Status */
+  --color-success: #4ade80;
+  --color-danger: #e85454;
+  --color-warning: #facc15;
+
+  /* Backward-compatible aliases */
+  --color-bg: var(--surface-0);
+  --color-surface: var(--surface-1);
+  --color-primary: var(--color-accent);
+  --color-primary-hover: var(--color-accent-hover);
+  --color-amber: var(--color-warning);
+  --color-amber-bg: color-mix(in srgb, var(--color-warning) 15%, transparent);
+  --color-amber-border: color-mix(in srgb, var(--color-warning) 40%, transparent);
+  --color-green: var(--color-success);
+  --color-green-bg: color-mix(in srgb, var(--color-success) 15%, transparent);
+  --color-green-border: color-mix(in srgb, var(--color-success) 40%, transparent);
+  --color-red: var(--color-danger);
+  --color-red-bg: color-mix(in srgb, var(--color-danger) 15%, transparent);
+  --color-red-border: color-mix(in srgb, var(--color-danger) 40%, transparent);
 
   --topbar-h: 56px;
   --sidebar-w: 240px;
 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-text);
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Light mode (opt-in via .theme-light on <html>) */
+:root.theme-light {
+  --surface-0: #efefec;
+  --surface-1: #e8e8e4;
+  --surface-2: #dddcd8;
+  --surface-3: #d4d4d0;
+  --surface-4: #c8c8c4;
+  --color-border: #d4d4d0;
+  --color-border-subtle: #dddcd8;
+  --color-text: #1b1b1b;
+  --color-text-secondary: #555555;
+  --color-text-muted: #999999;
+  --color-accent: #c4892a;
+  --color-accent-hover: #a8741f;
+  --color-accent-tint: #c4892a1a;
+}
+
+/* Typography scale (Tailwind-equivalent) */
+.text-xs { font-size: 0.75rem; line-height: 1rem; }
+.text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+.text-base { font-size: 1rem; line-height: 1.5rem; }
+.text-lg { font-size: 1.125rem; line-height: 1.75rem; }
+.text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+.text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+.text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+.text-6xl { font-size: 3.75rem; line-height: 1; }
+
+.leading-relaxed { line-height: 1.625; }
+.tracking-tight { letter-spacing: -0.025em; }
+
+/* Semantic headings, mobile -> desktop per scale */
+.heading-display { font-size: 2.25rem; line-height: 1.1; letter-spacing: -0.025em; font-weight: 700; }
+.heading-h2 { font-size: 1.875rem; line-height: 2.25rem; font-weight: 700; }
+.heading-h3 { font-size: 1.25rem; line-height: 1.75rem; font-weight: 600; }
+
+@media (min-width: 768px) {
+  .heading-display { font-size: 3.75rem; line-height: 1.1; }
+  .heading-h2 { font-size: 2.25rem; line-height: 2.5rem; }
 }
 
 *, *::before, *::after { box-sizing: border-box; }
