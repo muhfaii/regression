@@ -20,7 +20,7 @@
 	// see the deploy history for why we moved off it). The Worker proxies
 	// /api/* here instead of using a Container binding.
 	"vars": {
-		"BACKEND_URL": "https://infera-backend.onrender.com"
+		"BACKEND_URL": "https://infera-backend-xrix.onrender.com"
 	},
 	// Only used by `wrangler d1 migrations` tooling — the FastAPI app itself
 	// reaches D1 over its HTTP REST API (backend/services/d1.py), since it
