@@ -22,6 +22,14 @@
 	"vars": {
 		"BACKEND_URL": "https://infera-backend-xrix.onrender.com"
 	},
+	// v1 registered the InferaBackend Durable Object class from the earlier
+	// Container-based approach; v2 removes it now that the backend runs on
+	// Render instead. Required so Cloudflare doesn't reject deploys for no
+	// longer exporting a class it thinks still has live instances.
+	"migrations": [
+		{ "tag": "v1", "new_sqlite_classes": ["InferaBackend"] },
+		{ "tag": "v2", "deleted_classes": ["InferaBackend"] }
+	],
 	// Only used by `wrangler d1 migrations` tooling — the FastAPI app itself
 	// reaches D1 over its HTTP REST API (backend/services/d1.py), since it
 	// doesn't run inside the Workers runtime.
