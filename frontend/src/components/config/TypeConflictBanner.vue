@@ -42,8 +42,8 @@ function handleOverride(column: string, event: Event) {
 
 <style scoped>
 .conflict-banner {
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
+  background: var(--color-amber-bg);
+  border: 1px solid var(--color-amber-border);
   border-radius: 8px;
   padding: 12px 14px;
   display: flex;
@@ -53,7 +53,7 @@ function handleOverride(column: string, event: Event) {
 .banner-title {
   font-size: 13px;
   font-weight: 600;
-  color: #92400e;
+  color: var(--color-amber);
   margin: 0;
 }
 .conflict-row {
@@ -79,12 +79,13 @@ function handleOverride(column: string, event: Event) {
   border-radius: 4px;
   text-transform: uppercase;
 }
-.type-chip.required { background: #d1fae5; color: #065f46; }
-.type-chip.actual { background: #fee2e2; color: #991b1b; }
+.type-chip.required { background: var(--color-green-bg); color: var(--color-green); }
+.type-chip.actual { background: var(--color-red-bg); color: var(--color-red); }
 .type-select {
-  border: 1px solid #fcd34d;
+  border: 1px solid var(--color-amber-border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--color-bg);
+  color: var(--color-text);
   font-size: 12px;
   font-weight: 600;
   padding: 4px 8px;

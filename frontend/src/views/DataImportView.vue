@@ -227,9 +227,9 @@ function reset() {
 .import-title { font-size: 24px; margin-bottom: 6px; }
 .import-sub { color: var(--color-text-muted); margin-bottom: 24px; }
 .info-banner {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1d4ed8;
+  background: var(--surface-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
   border-radius: 8px;
   padding: 10px 14px;
   font-size: 13px;
@@ -262,8 +262,8 @@ function reset() {
 .tab-panel { min-height: 160px; }
 .status-msg { text-align: center; color: var(--color-text-muted); margin-top: 16px; }
 .error-msg {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--color-red-bg);
+  border: 1px solid var(--color-red-border);
   color: var(--color-red);
   border-radius: 8px;
   padding: 10px 14px;

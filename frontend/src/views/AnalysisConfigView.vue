@@ -337,7 +337,7 @@ async function runAnalysis() {
 .run-btn:hover:not(:disabled) { background: var(--color-primary-hover); }
 .run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .validation-msg { font-size: 12px; color: var(--color-text-muted); margin-top: -16px; }
-.conflict-msg { color: #92400e; }
+.conflict-msg { color: var(--color-amber); }
 .option-select { display: flex; flex-direction: column; gap: 4px; }
 .option-select-label { font-size: 13px; font-weight: 600; color: var(--color-text); }
 .option-select-input {
@@ -351,8 +351,8 @@ async function runAnalysis() {
 }
 .option-select-input:focus { outline: 2px solid var(--color-primary); }
 .error-msg {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--color-red-bg);
+  border: 1px solid var(--color-red-border);
   color: var(--color-red);
   border-radius: 8px;
   padding: 10px 14px;

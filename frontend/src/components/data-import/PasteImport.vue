@@ -75,8 +75,8 @@ async function handleImport() {
   outline: 2px solid var(--color-primary);
 }
 .error-msg {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--color-red-bg);
+  border: 1px solid var(--color-red-border);
   color: var(--color-red);
   border-radius: 8px;
   padding: 10px 14px;

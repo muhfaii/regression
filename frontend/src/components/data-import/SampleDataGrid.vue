@@ -80,8 +80,8 @@ async function loadSample(id: string) {
 .sample-desc { font-size: 12px; color: var(--color-text-muted); line-height: 1.4; }
 .loading-dot { font-size: 11px; color: var(--color-primary); margin-top: 4px; }
 .error-msg {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--color-red-bg);
+  border: 1px solid var(--color-red-border);
   color: var(--color-red);
   border-radius: 8px;
   padding: 10px 14px;

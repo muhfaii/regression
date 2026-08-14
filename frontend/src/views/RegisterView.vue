@@ -147,6 +147,13 @@ async function handleRegister() {
   transition: border-color 0.15s;
 }
 .field-input:focus { outline: 2px solid var(--color-primary); outline-offset: -1px; }
+.field-input:-webkit-autofill,
+.field-input:-webkit-autofill:hover,
+.field-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-bg) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
 .input-mismatch { border-color: var(--color-red); }
 .password-wrap { position: relative; display: flex; }
 .password-wrap .field-input { flex: 1; padding-right: 52px; }
@@ -166,8 +173,8 @@ async function handleRegister() {
 .password-toggle:hover { color: var(--color-text); }
 .field-error { font-size: 12px; color: var(--color-red); }
 .error-msg {
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--color-red-bg);
+  border: 1px solid var(--color-red-border);
   color: var(--color-red);
   border-radius: 8px;
   padding: 10px 14px;

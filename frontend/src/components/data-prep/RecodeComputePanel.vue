@@ -196,7 +196,7 @@ async function applyCompute() {
 }
 .checkbox-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .error-msg {
-  background: #fef2f2; border: 1px solid #fecaca; color: var(--color-red);
+  background: var(--color-red-bg); border: 1px solid var(--color-red-border); color: var(--color-red);
   border-radius: 8px; padding: 10px 14px; font-size: 13px;
 }
 .success-msg {

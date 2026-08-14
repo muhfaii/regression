@@ -247,8 +247,8 @@ async function copyShareUrl() {
 .export-error {
   font-size: 12px;
   color: var(--color-red);
-  background: #fef2f2;
-  border: 1px solid #fecaca;
+  background: var(--color-red-bg);
+  border: 1px solid var(--color-red-border);
   border-radius: 6px;
   padding: 6px 10px;
   margin: 0;

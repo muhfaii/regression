@@ -197,7 +197,7 @@ const recommendedTest = computed(() =>
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.wizard-option:hover { border-color: var(--color-primary); background: #f5f3ff; }
+.wizard-option:hover { border-color: var(--color-primary); background: var(--color-accent-tint); }
 .opt-label { font-size: 14px; font-weight: 500; }
 .opt-hint { font-size: 12px; color: var(--color-text-muted); margin-top: 3px; }
 .back-btn {
