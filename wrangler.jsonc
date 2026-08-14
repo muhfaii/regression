@@ -16,32 +16,15 @@
 		"binding": "ASSETS",
 		"not_found_handling": "single-page-application"
 	},
-	"containers": [
-		{
-			"image": "./Dockerfile",
-			"class_name": "InferaBackend",
-			"max_instances": 1
-		}
-	],
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "BACKEND",
-				"class_name": "InferaBackend"
-			}
-		]
+	// Backend runs on Render (Cloudflare Containers requires Workers Paid,
+	// see the deploy history for why we moved off it). The Worker proxies
+	// /api/* here instead of using a Container binding.
+	"vars": {
+		"BACKEND_URL": "https://infera-backend.onrender.com"
 	},
-	"migrations": [
-		{
-			"tag": "v1",
-			"new_sqlite_classes": [
-				"InferaBackend"
-			]
-		}
-	],
 	// Only used by `wrangler d1 migrations` tooling — the FastAPI app itself
-	// reaches D1 over its HTTP REST API (backend/services/d1.py), since
-	// Containers can't use the native env.DB binding.
+	// reaches D1 over its HTTP REST API (backend/services/d1.py), since it
+	// doesn't run inside the Workers runtime.
 	"d1_databases": [
 		{
 			"binding": "DB",

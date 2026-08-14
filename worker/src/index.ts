@@ -1,14 +1,6 @@
-import { Container, getContainer } from "@cloudflare/containers";
-
-// Single instance for now — no sticky/multi-instance routing yet.
-export class InferaBackend extends Container {
-  defaultPort = 8000;
-  sleepAfter = "10m";
-}
-
 interface Env {
-  BACKEND: DurableObjectNamespace<InferaBackend>;
   ASSETS: Fetcher;
+  BACKEND_URL: string; // e.g. https://infera-backend.onrender.com
 }
 
 export default {
@@ -16,8 +8,9 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname.startsWith("/api/")) {
-      const backend = getContainer(env.BACKEND); // single named instance
-      return backend.fetch(request);
+      const backendUrl = new URL(url.pathname + url.search, env.BACKEND_URL);
+      const proxied = new Request(backendUrl, request);
+      return fetch(proxied);
     }
 
     return env.ASSETS.fetch(request);

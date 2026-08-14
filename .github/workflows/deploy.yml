@@ -1,5 +1,9 @@
 name: Deploy infera
 
+# Deploys the Worker (routing + static assets). The FastAPI backend runs on
+# Render, which watches this repo via its own GitHub integration and deploys
+# itself on push — not driven from here.
+
 on:
   push:
     branches: [main]
@@ -23,15 +27,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Install root dependencies (wrangler, @cloudflare/containers)
+      - name: Install root dependencies (wrangler)
         run: npm ci
 
-      # Deploys the Worker + Container. Runtime secrets the FastAPI container
-      # needs (CF_ACCOUNT_ID, CF_D1_DATABASE_ID, CF_API_TOKEN, LLM_API_KEY,
-      # JWT secret) are NOT set here — they're pushed to Cloudflare once via
-      # `wrangler secret put <NAME>` and persist across deploys, since they're
-      # container runtime env vars, not inputs to the deploy step itself.
-      - name: Deploy to Cloudflare
+      - name: Deploy Worker to Cloudflare
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}

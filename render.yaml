@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: infera-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: CF_ACCOUNT_ID
+        sync: false
+      - key: CF_D1_DATABASE_ID
+        sync: false
+      - key: CF_API_TOKEN
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
