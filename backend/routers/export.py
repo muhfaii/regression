@@ -4,6 +4,7 @@ from __future__ import annotations
 import dataclasses
 import io
 import uuid
+from datetime import datetime
 
 from docx import Document
 from fastapi import APIRouter, HTTPException
@@ -12,6 +13,8 @@ from fastapi.responses import StreamingResponse
 from backend.services import session_store
 
 router = APIRouter(tags=["export"])
+
+_WORD_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 _SKIP_STAT_KEYS = frozenset({
     "variables", "groups", "coefficients", "post_hoc",
@@ -39,9 +42,7 @@ async def export_word(result_id: str, session_id: str) -> StreamingResponse:
     filename = f"{result.get('test_key', 'result')}_{result_id[:8]}.docx"
     return StreamingResponse(
         buf,
-        media_type=(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        ),
+        media_type=_WORD_MEDIA_TYPE,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
@@ -63,6 +64,89 @@ async def get_shared_result(token: str) -> dict:
     if raw is None:
         raise HTTPException(status_code=404, detail="Share link not found.")
     return _normalize(raw)
+
+
+# ---------------------------------------------------------------------------
+# Reproducibility log
+# ---------------------------------------------------------------------------
+
+@router.get("/api/export/log/{session_id}")
+async def get_session_log(session_id: str) -> dict:
+    session = session_store.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+    return {"filename": session.filename, "steps": session.steps}
+
+
+@router.get("/api/export/log/{session_id}/download")
+async def download_session_log(session_id: str) -> StreamingResponse:
+    session = session_store.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+
+    text = _build_log_text(session)
+    buf = io.BytesIO(text.encode("utf-8"))
+    return StreamingResponse(
+        buf,
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="analysis_log_{session_id[:8]}.txt"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Multi-result report
+# ---------------------------------------------------------------------------
+
+@router.post("/api/export/report/{session_id}")
+async def export_report(session_id: str, body: dict | None = None) -> StreamingResponse:
+    session = session_store.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+
+    result_ids = (body or {}).get("result_ids") or list(session.results.keys())
+    results = [_normalize(session.results[rid]) for rid in result_ids if rid in session.results]
+    if not results:
+        raise HTTPException(status_code=422, detail="No results to include in the report.")
+
+    doc = _build_report_docx(session.filename, results)
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+
+    filename = f"analysis_report_{session_id[:8]}.docx"
+    return StreamingResponse(
+        buf,
+        media_type=_WORD_MEDIA_TYPE,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Session-level (multi-result) sharing
+# ---------------------------------------------------------------------------
+
+@router.post("/api/export/share-session/{session_id}")
+async def create_session_share_link(session_id: str, body: dict | None = None) -> dict:
+    session = session_store.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found or expired.")
+
+    result_ids = (body or {}).get("result_ids") or list(session.results.keys())
+    results = [_normalize(session.results[rid]) for rid in result_ids if rid in session.results]
+    if not results:
+        raise HTTPException(status_code=422, detail="No results to share.")
+
+    token = str(uuid.uuid4())
+    session_store.save_share_session(token, {"filename": session.filename, "results": results})
+    return {"token": token, "url": f"/share/session/{token}"}
+
+
+@router.get("/api/share/session/{token}")
+async def get_shared_session(token: str) -> dict:
+    bundle = session_store.get_share_session(token)
+    if bundle is None:
+        raise HTTPException(status_code=404, detail="Share link not found.")
+    return bundle
 
 
 # ---------------------------------------------------------------------------
@@ -93,11 +177,9 @@ def _fmt(val: object) -> str:
     return str(val)
 
 
-def _build_docx(result: dict) -> Document:
-    doc = Document()
-
-    # Title + N
-    doc.add_heading(result.get("test_name", "Analysis"), 0)
+def _add_result_section(doc: Document, result: dict, title_level: int = 0) -> None:
+    """Append one result's content to doc, starting headings at title_level."""
+    doc.add_heading(result.get("test_name", "Analysis"), title_level)
     doc.add_paragraph(f"N = {result.get('n_obs', '—')}")
 
     # Key scalar statistics table
@@ -107,7 +189,7 @@ def _build_docx(result: dict) -> Document:
         if k not in _SKIP_STAT_KEYS and isinstance(v, (int, float, str, bool))
     }
     if scalar_stats:
-        doc.add_heading("Statistics", level=1)
+        doc.add_heading("Statistics", level=title_level + 1)
         tbl = doc.add_table(rows=1, cols=2)
         tbl.style = "Table Grid"
         hdr = tbl.rows[0].cells
@@ -121,7 +203,7 @@ def _build_docx(result: dict) -> Document:
     # Effect size
     effect = result.get("effect_size")
     if effect:
-        doc.add_heading("Effect Size", level=1)
+        doc.add_heading("Effect Size", level=title_level + 1)
         doc.add_paragraph(
             f"{effect['name']}: {effect['value']:.3f} ({effect['interpretation']})"
         )
@@ -129,7 +211,7 @@ def _build_docx(result: dict) -> Document:
     # Assumption checks
     checks = result.get("assumption_checks", [])
     if checks:
-        doc.add_heading("Assumption Checks", level=1)
+        doc.add_heading("Assumption Checks", level=title_level + 1)
         icons = {"pass": "✓", "amber": "⚠", "fail": "✗"}
         for check in checks:
             icon = icons.get(check.get("status", ""), "")
@@ -140,10 +222,34 @@ def _build_docx(result: dict) -> Document:
     # Interpretation — APA first (most useful for export), then plain English
     interp = result.get("interpretation", {})
     if interp:
-        doc.add_heading("Interpretation", level=1)
-        doc.add_heading("APA 7", level=2)
+        doc.add_heading("Interpretation", level=title_level + 1)
+        doc.add_heading("APA 7", level=title_level + 2)
         doc.add_paragraph(interp.get("apa", ""))
-        doc.add_heading("Plain English", level=2)
+        doc.add_heading("Plain English", level=title_level + 2)
         doc.add_paragraph(interp.get("plain", ""))
 
+
+def _build_docx(result: dict) -> Document:
+    doc = Document()
+    _add_result_section(doc, result, title_level=0)
     return doc
+
+
+def _build_report_docx(filename: str, results: list[dict]) -> Document:
+    doc = Document()
+    doc.add_heading("Analysis Report", 0)
+    doc.add_paragraph(f"Dataset: {filename}")
+    doc.add_paragraph(f"{len(results)} result(s) included")
+    for i, result in enumerate(results):
+        if i > 0:
+            doc.add_page_break()
+        _add_result_section(doc, result, title_level=1)
+    return doc
+
+
+def _build_log_text(session) -> str:
+    lines = [f"Analysis log — {session.filename}", ""]
+    for step in session.steps:
+        ts = datetime.fromtimestamp(step["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
+        lines.append(f"[{ts}] {step['action']}: {step['detail']}")
+    return "\n".join(lines)

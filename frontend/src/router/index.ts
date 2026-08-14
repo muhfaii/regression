@@ -11,12 +11,14 @@ const router = createRouter({
     { path: '/register', component: () => import('../views/RegisterView.vue') },
     { path: '/dashboard', component: () => import('../views/DashboardView.vue'), meta: { requiresAuth: true } },
     { path: '/data', component: () => import('../views/DataImportView.vue'), meta: { requiresAuth: true, step: 1 } },
+    { path: '/prep', component: () => import('../views/DataPrepView.vue'), meta: { requiresAuth: true, step: 1 } },
     { path: '/home', component: () => import('../views/HomeModeView.vue'), meta: { requiresAuth: true, step: 2 } },
     { path: '/guide', component: () => import('../views/GuideMeView.vue'), meta: { requiresAuth: true, step: 2 } },
     { path: '/browse', component: () => import('../views/BrowseTestsView.vue'), meta: { requiresAuth: true, step: 2 } },
     { path: '/configure', component: () => import('../views/AnalysisConfigView.vue'), meta: { requiresAuth: true, step: 3 } },
     { path: '/results', component: () => import('../views/ResultsView.vue'), meta: { requiresAuth: true, step: 4 } },
     { path: '/conversations/:id', component: () => import('../views/ConversationView.vue'), meta: { requiresAuth: true } },
+    { path: '/share/session/:token', component: () => import('../views/SessionShareView.vue') },
     { path: '/share/:token', component: () => import('../views/ShareView.vue') },
   ],
 })
@@ -32,7 +34,7 @@ router.beforeEach((to) => {
 })
 
 // Dataset guard: analysis screens require a loaded dataset
-const DATASET_GUARDED = ['/home', '/guide', '/browse', '/configure', '/results']
+const DATASET_GUARDED = ['/home', '/prep', '/guide', '/browse', '/configure', '/results']
 
 router.afterEach((to) => {
   if (DATASET_GUARDED.includes(to.path)) {

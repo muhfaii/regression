@@ -65,6 +65,10 @@ async def upload_file(file: UploadFile, conversation_id: str | None = None) -> D
         raise HTTPException(status_code=422, detail=str(exc))
 
     session_id = session_store.create_session(df, filename, conversation_id=conversation_id)
+    session_store.log_step(
+        session_id, "Import",
+        f"Imported '{filename}' ({ingest.row_count} rows, {len(ingest.columns)} columns).",
+    )
     return _build_preview(df, ingest, filename, session_id, conversation_id)
 
 
@@ -99,6 +103,10 @@ async def paste_data(body: dict, conversation_id: str | None = None) -> DatasetP
     ]
     ingest = IngestResult(df=df, row_count=len(df), columns=cols)
     session_id = session_store.create_session(df, "pasted_data.csv", conversation_id=conversation_id)
+    session_store.log_step(
+        session_id, "Import",
+        f"Imported pasted data ({ingest.row_count} rows, {len(ingest.columns)} columns).",
+    )
     return _build_preview(df, ingest, "pasted_data.csv", session_id, conversation_id)
 
 
@@ -128,4 +136,8 @@ async def load_sample(sample_id: str, conversation_id: str | None = None) -> Dat
 
     df = ingest.df
     session_id = session_store.create_session(df, sample["file"], conversation_id=conversation_id)
+    session_store.log_step(
+        session_id, "Import",
+        f"Loaded sample dataset '{sample['label']}' ({ingest.row_count} rows, {len(ingest.columns)} columns).",
+    )
     return _build_preview(df, ingest, sample["file"], session_id, conversation_id)

@@ -10,6 +10,7 @@ import pandas as pd
 import statsmodels.api as sm
 from scipy import stats as scipy_stats
 
+from .assumptions import ols_assumption_checks
 from .base import AnalysisResult, EffectSize, Interpretation
 
 
@@ -181,6 +182,8 @@ def run(df: pd.DataFrame, config: dict, options=None) -> AnalysisResult:
         "moderator": moderator,
         "outcome": outcome,
         "covariates": list(covariates),
+        "fitted_values": [_r4(v) for v in model.fittedvalues],
+        "residuals": [_r4(v) for v in model.resid],
     }
 
     interp = _build_interpretation(outcome, predictor, moderator, stats)
@@ -190,12 +193,14 @@ def run(df: pd.DataFrame, config: dict, options=None) -> AnalysisResult:
         interpretation=_f2_interp(interaction_f2),
     )
 
+    checks = ols_assumption_checks(model, X_full.values) if options is None or getattr(options, "assumption_checks", True) else []
+
     return AnalysisResult(
         test_key="moderation",
         test_name="Moderation Analysis",
         n_obs=int(model.nobs),
         statistics=stats,
-        assumption_checks=[],
+        assumption_checks=checks,
         interpretation=interp,
         effect_size=effect,
         warnings=[],

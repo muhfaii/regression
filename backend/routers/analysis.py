@@ -112,6 +112,10 @@ async def run_analysis(req: RunRequest) -> AnalysisResult:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}")
 
     session_store.save_result(req.session_id, result.result_id, result.__dict__)
+    session_store.log_step(
+        req.session_id, "Analysis",
+        f"Ran {result.test_name} (N = {result.n_obs}).",
+    )
 
     # Persist result as conversation message when linked
     if req.conversation_id:

@@ -5,6 +5,9 @@ import { useResultsStore } from '../stores/results'
 import { useSessionStore } from '../stores/session'
 import type { DescStat, VifEntry, Remediation, CoefficientRow } from '../types/results'
 import ExportPanel from '../components/results/ExportPanel.vue'
+import GlossaryTerm from '../components/results/GlossaryTerm.vue'
+import ResidualPlot from '../components/results/ResidualPlot.vue'
+import GroupMeansChart from '../components/results/GroupMeansChart.vue'
 
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from 'chart.js'
 import { Line } from 'vue-chartjs'
@@ -85,6 +88,8 @@ const LABEL_MAP: Record<string, string> = {
   concordance: 'Concordance',
   llf: 'Log-likelihood',
   se_type: 'SE type',
+  alpha: "Cronbach's alpha",
+  alpha_standardized: "Cronbach's alpha (standardized)",
 }
 
 function fmtLabel(key: string): string {
@@ -107,11 +112,46 @@ const reliabilityItems = computed(() => {
   return items
 })
 
-// Group summaries: statistics.groups (ANOVA, Mann-Whitney, Kruskal-Wallis)
+// Group summaries: statistics.groups (ANOVA, Kruskal-Wallis)
 const groupStats = computed(() => {
   const g = result.value?.statistics?.groups
   if (!g || typeof g !== 'object') return null
   return g as Record<string, Record<string, number>>
+})
+
+// Mean ± SD chart only applies to groups with mean/sd fields (ANOVA), not
+// median-only groups (Kruskal-Wallis).
+const groupMeansChartData = computed(() => {
+  const g = groupStats.value
+  if (!g) return null
+  const allHaveMeanSd = Object.values(g).every(s => typeof s.mean === 'number' && typeof s.sd === 'number')
+  return allHaveMeanSd ? (g as Record<string, { n: number; mean: number; sd: number }>) : null
+})
+
+// t-tests report mean_a/mean_b/sd_a/sd_b/n_a/n_b as flat scalars rather than
+// a groups object — synthesize the same chart shape from those.
+const TTEST_KEYS = new Set(['independent_t', 'paired_t'])
+const tTestGroupChartData = computed(() => {
+  const r = result.value
+  if (!r || !TTEST_KEYS.has(r.test_key)) return null
+  const s = r.statistics as Record<string, unknown>
+  const meanA = s.mean_a, meanB = s.mean_b, sdA = s.sd_a, sdB = s.sd_b, nA = s.n_a, nB = s.n_b
+  if ([meanA, meanB, sdA, sdB, nA, nB].some(v => typeof v !== 'number')) return null
+  const labelA = typeof s.group_a === 'string' ? s.group_a : 'Group A'
+  const labelB = typeof s.group_b === 'string' ? s.group_b : 'Group B'
+  return {
+    [labelA]: { n: nA as number, mean: meanA as number, sd: sdA as number },
+    [labelB]: { n: nB as number, mean: meanB as number, sd: sdB as number },
+  }
+})
+
+// Residuals vs fitted values: statistics.residuals / fitted_values (OLS-based models)
+const residualPlotData = computed(() => {
+  const s = result.value?.statistics
+  const residuals = s?.residuals
+  const fitted = s?.fitted_values
+  if (!Array.isArray(residuals) || !Array.isArray(fitted) || residuals.length === 0) return null
+  return { residuals: residuals as number[], fitted: fitted as number[] }
 })
 
 // Coefficient table: statistics.coefficients (OLS via regression module, Logistic)
@@ -469,9 +509,15 @@ function newAnalysis() {
           :key="key"
           class="stat-card"
         >
-          <div class="stat-label">{{ fmtLabel(key) }}</div>
+          <div class="stat-label"><GlossaryTerm :term="key" :label="fmtLabel(key)" /></div>
           <div class="stat-value">{{ fmt(val) }}</div>
         </div>
+      </div>
+
+      <!-- t-test group comparison chart -->
+      <div v-if="tTestGroupChartData" class="section">
+        <h3 class="section-title">Group comparison</h3>
+        <GroupMeansChart :groups="tTestGroupChartData" />
       </div>
 
       <!-- Descriptive: per-variable table -->
@@ -495,8 +541,8 @@ function newAnalysis() {
           <thead>
             <tr>
               <th>Item</th>
-              <th>Corrected item-total correlation</th>
-              <th>Alpha if deleted</th>
+              <th><GlossaryTerm term="corrected_item_total" label="Corrected item-total correlation" /></th>
+              <th><GlossaryTerm term="alpha_if_deleted" label="Alpha if deleted" /></th>
             </tr>
           </thead>
           <tbody>
@@ -526,6 +572,7 @@ function newAnalysis() {
             </tr>
           </tbody>
         </table>
+        <GroupMeansChart v-if="groupMeansChartData" :groups="groupMeansChartData" />
       </div>
 
       <!-- Coefficient table -->
@@ -536,11 +583,11 @@ function newAnalysis() {
             <tr>
               <th>Predictor</th>
               <th>Coefficient</th>
-              <th>SE</th>
-              <th>t</th>
-              <th>p</th>
-              <th>95% CI</th>
-              <th>Sig.</th>
+              <th><GlossaryTerm term="se" label="SE" /></th>
+              <th><GlossaryTerm term="t" label="t" /></th>
+              <th><GlossaryTerm term="p_value" label="p" /></th>
+              <th><GlossaryTerm term="ci" label="95% CI" /></th>
+              <th><GlossaryTerm term="p_value" label="Sig." /></th>
             </tr>
           </thead>
           <tbody>
@@ -560,6 +607,13 @@ function newAnalysis() {
         </table>
         <p v-if="seCitation" style="margin-top:8px;font-size:13px;color:var(--color-text-secondary);">{{ seCitation }}</p>
         <p v-if="seJustification" style="margin-top:4px;font-size:12px;color:var(--color-text-muted);font-style:italic;">{{ seJustification }}</p>
+      </div>
+
+      <!-- Residuals vs fitted values (OLS-based models) -->
+      <div v-if="residualPlotData" class="section">
+        <h3 class="section-title">Residuals vs. fitted values</h3>
+        <p class="chart-caption">A random scatter around zero supports the homoscedasticity and linearity assumptions; a funnel or curved pattern suggests they may be violated.</p>
+        <ResidualPlot :fitted="residualPlotData.fitted" :residuals="residualPlotData.residuals" />
       </div>
 
       <!-- Descriptive stats for regression model variables -->
@@ -598,7 +652,7 @@ function newAnalysis() {
           <thead>
             <tr>
               <th>Variable</th>
-              <th>VIF</th>
+              <th><GlossaryTerm term="vif" label="VIF" /></th>
               <th>Flag</th>
             </tr>
           </thead>
@@ -716,7 +770,7 @@ function newAnalysis() {
         <h3 class="section-title">ANOVA summary</h3>
         <table class="data-table">
           <thead>
-            <tr><th>Term</th><th>F</th><th>df</th><th>p</th><th>η²</th></tr>
+            <tr><th>Term</th><th><GlossaryTerm term="f_statistic" label="F" /></th><th>df</th><th><GlossaryTerm term="p_value" label="p" /></th><th><GlossaryTerm term="eta_sq" label="η²" /></th></tr>
           </thead>
           <tbody>
             <tr v-for="t in factorialTerms" :key="t.term" :class="{ 'sig-row': t.p_value < 0.05 }">
@@ -1340,6 +1394,7 @@ function newAnalysis() {
 
 /* Headline cards */
 .stats-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+.chart-caption { font-size: 12px; color: var(--color-text-muted); margin: 0 0 10px; }
 .stat-card { border: 1px solid var(--color-border); border-radius: 10px; padding: 14px 18px; min-width: 120px; background: var(--color-surface); }
 .stat-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--color-text-muted); margin-bottom: 4px; }
 .stat-value { font-size: 18px; font-weight: 700; }

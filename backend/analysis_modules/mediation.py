@@ -11,6 +11,7 @@ import pandas as pd
 import scipy.stats as scipy_stats
 import statsmodels.api as sm
 
+from .assumptions import ols_assumption_checks
 from .base import AnalysisResult, EffectSize, Interpretation
 
 
@@ -159,6 +160,8 @@ def run(df: pd.DataFrame, config: dict, options=None) -> AnalysisResult:
         "mediator": mediator,
         "outcome": outcome,
         "covariates": list(covariates),
+        "fitted_values": [_r4(v) for v in model_b.fittedvalues],
+        "residuals": [_r4(v) for v in model_b.resid],
     }
 
     effect = EffectSize(
@@ -167,12 +170,14 @@ def run(df: pd.DataFrame, config: dict, options=None) -> AnalysisResult:
         interpretation=_prop_interp(proportion_mediated),
     )
 
+    checks = ols_assumption_checks(model_b, X_b.values) if options is None or getattr(options, "assumption_checks", True) else []
+
     return AnalysisResult(
         test_key="mediation",
         test_name="Mediation Analysis",
         n_obs=int(model_c.nobs),
         statistics=stats,
-        assumption_checks=[],
+        assumption_checks=checks,
         interpretation=_build_interpretation(outcome, predictor, mediator, stats),
         effect_size=effect,
         warnings=[],
