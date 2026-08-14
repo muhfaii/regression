@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import FileDropZone from '../components/data-import/FileDropZone.vue'
@@ -7,6 +7,7 @@ import PasteImport from '../components/data-import/PasteImport.vue'
 import SampleDataGrid from '../components/data-import/SampleDataGrid.vue'
 import ColumnPreviewTable from '../components/data-import/ColumnPreviewTable.vue'
 import { useApi } from '../composables/useApi'
+import { usePyodide } from '../services/pyodide'
 import { useDatasetStore } from '../stores/dataset'
 import { useSessionStore } from '../stores/session'
 import type { DatasetPreview } from '../types/dataset'
@@ -18,6 +19,11 @@ const dataset = useDatasetStore()
 const session = useSessionStore()
 const api = useApi()
 const auth = useAuthStore()
+const pyodide = usePyodide()
+
+onMounted(() => {
+  pyodide.initialize()
+})
 
 const conversationId = computed(() => route.query.conversation_id as string | undefined)
 

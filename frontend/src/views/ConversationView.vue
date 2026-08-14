@@ -4,17 +4,29 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useConversationStore, type Conversation } from '../stores/conversation'
 import type { ChatMessage as ChatMessageType } from '../stores/conversation'
+import { useApi } from '../composables/useApi'
 import ChatMessageBubble from '../components/chat/ChatMessage.vue'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const convStore = useConversationStore()
+const api = useApi()
 
 const conversations = ref<Conversation[]>([])
 const sidebarLoading = ref(true)
 const sending = ref(false)
 const textInput = ref('')
+const aiEnabled = ref(false)
+
+async function checkAiConfig() {
+  try {
+    const cfg = await api.checkChatConfig()
+    aiEnabled.value = cfg.configured
+  } catch {
+    aiEnabled.value = false
+  }
+}
 
 async function fetchConversations() {
   sidebarLoading.value = true
@@ -37,10 +49,8 @@ async function loadConversation(id: string) {
       const data = await res.json()
       convStore.setConversation(data)
 
-      // If no messages yet, add welcome message
       if (data.messages.length === 0) {
         await addWelcomeMessage(id)
-        // Reload to get the welcome message
         const r2 = await fetch(`/api/conversations/${id}`, {
           headers: { Authorization: `Bearer ${auth.token}` },
         })
@@ -103,6 +113,18 @@ async function sendTextMessage() {
 
   sending.value = true
   try {
+    if (aiEnabled.value) {
+      try {
+        const data = await api.sendChatMessage(convStore.currentId, text)
+        convStore.addMessage(data.user_message as ChatMessageType)
+        convStore.addMessage(data.assistant_message as ChatMessageType)
+        textInput.value = ''
+        return
+      } catch {
+        aiEnabled.value = false
+      }
+    }
+    // Direct send (no AI or AI unavailable)
     const res = await fetch(`/api/conversations/${convStore.currentId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
@@ -122,7 +144,6 @@ async function sendTextMessage() {
   }
 }
 
-// Watch for route param changes
 watch(() => route.params.id, (id) => {
   if (id && typeof id === 'string') {
     loadConversation(id)
@@ -130,6 +151,7 @@ watch(() => route.params.id, (id) => {
 })
 
 onMounted(() => {
+  checkAiConfig()
   fetchConversations()
   const id = route.params.id
   if (id && typeof id === 'string') {
@@ -217,7 +239,7 @@ onMounted(() => {
           v-model="textInput"
           type="text"
           class="input-field"
-          placeholder="Type a message…"
+          :placeholder="aiEnabled ? 'Ask about your data or analysis…' : 'Type a message…'"
           :disabled="!convStore.currentId || sending"
           @keydown.enter.prevent="sendTextMessage"
         />

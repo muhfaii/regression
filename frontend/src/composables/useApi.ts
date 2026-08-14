@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores/auth'
 import type { DatasetPreview } from '../types/dataset'
+import { usePyodide } from '../services/pyodide'
 
 const BASE = '/api'
 
@@ -31,11 +32,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function useApi() {
+  const pyd = usePyodide()
+
   function _query(conversationId?: string | null): string {
     return conversationId ? `?conversation_id=${encodeURIComponent(conversationId)}` : ''
   }
 
   async function uploadFile(file: File, conversationId?: string | null) {
+    if (pyd.isReady.value) {
+      try { return await pyd.parseFile(file) } catch { /* fall through */ }
+    }
     const form = new FormData()
     form.append('file', file)
     const res = await fetch(`${BASE}/data/upload${_query(conversationId)}`, { method: 'POST', body: form })
@@ -55,6 +61,9 @@ export function useApi() {
   }
 
   async function pasteData(text: string, conversationId?: string | null) {
+    if (pyd.isReady.value) {
+      try { return await pyd.parseText(text) } catch { /* fall through */ }
+    }
     const res = await fetch(`${BASE}/data/paste${_query(conversationId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -68,11 +77,31 @@ export function useApi() {
   }
 
   async function runAnalysis(payload: object, conversationId?: string | null) {
+    if (pyd.isReady.value) {
+      try {
+        const p = payload as Record<string, unknown>
+        return await pyd.runAnalysis(
+          p.test_key as string,
+          p.config as Record<string, unknown>,
+          (p.options || {}) as Record<string, unknown>,
+        )
+      } catch { /* fall through */ }
+    }
     const body = conversationId ? { ...payload, conversation_id: conversationId } : payload
     return request('/analysis/run', { method: 'POST', body: JSON.stringify(body) })
   }
 
   async function validateConfig(payload: object) {
+    if (pyd.isReady.value) {
+      try {
+        const p = payload as Record<string, unknown>
+        return await pyd.validateConfig(
+          p.test_key as string,
+          p.config as Record<string, unknown>,
+          (p.column_overrides as Record<string, string>) || {},
+        )
+      } catch { /* fall through */ }
+    }
     return request<{ conflicts: { slot: string; column: string; required_type: string; actual_type: string }[] }>(
       '/analysis/validate-config',
       { method: 'POST', body: JSON.stringify(payload) },
@@ -220,11 +249,24 @@ export function useApi() {
     return request<{ filename: string; results: Record<string, unknown>[] }>(`/share/session/${token}`)
   }
 
+  async function checkChatConfig() {
+    return request<{ configured: boolean; model: string }>('/chat/config')
+  }
+
+  async function sendChatMessage(conversationId: string, message: string) {
+    return request<{
+      user_message: { id: string; conversation_id: string; role: string; content_type: string; payload: any; created_at: string }
+      assistant_message: { id: string; conversation_id: string; role: string; content_type: string; payload: any; created_at: string }
+    }>('/chat', { method: 'POST', body: JSON.stringify({ conversation_id: conversationId, message }) })
+  }
+
   return {
     uploadFile, listSamples, loadSample, pasteData,
     applyMissingData, recodeColumn, computeColumn, reverseScore, mergeDatasets,
     runAnalysis, validateConfig,
     exportWord, createShareLink, getSharedResult,
     getSessionLog, downloadSessionLog, exportReport, createSessionShareLink, getSharedSession,
+    checkChatConfig, sendChatMessage,
+    pyodideStatus: pyd.loadingStatus,
   }
 }
