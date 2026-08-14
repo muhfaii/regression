@@ -1,0 +1,35 @@
+name: Deploy infera
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # Deploys the Worker + Container. Runtime secrets the FastAPI container
+      # needs (CF_ACCOUNT_ID, CF_D1_DATABASE_ID, CF_API_TOKEN, LLM_API_KEY,
+      # JWT secret) are NOT set here — they're pushed to Cloudflare once via
+      # `wrangler secret put <NAME>` and persist across deploys, since they're
+      # container runtime env vars, not inputs to the deploy step itself.
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

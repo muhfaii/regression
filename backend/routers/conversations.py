@@ -4,12 +4,8 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.database import get_db
 from backend.middleware import get_current_user
-from backend.models.conversation import Conversation, Message
 from backend.models.user import User
 from backend.schemas.conversation import (
     ConversationListItem,
@@ -19,6 +15,7 @@ from backend.schemas.conversation import (
     MessageResponse,
     UpdateConversationRequest,
 )
+from backend.services import conversation_repo
 
 
 def _auto_title(dataset_name: str | None) -> str:
@@ -26,30 +23,28 @@ def _auto_title(dataset_name: str | None) -> str:
     prefix = dataset_name or "New analysis"
     return f"{prefix} - {date_part}"
 
+
+def _to_msg_response(msg) -> MessageResponse:
+    return MessageResponse(
+        id=msg.id,
+        conversation_id=msg.conversation_id,
+        role=msg.role,
+        content_type=msg.content_type,
+        payload=json.loads(msg.payload) if isinstance(msg.payload, str) else msg.payload,
+        created_at=msg.created_at,
+    )
+
+
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
 
 @router.get("", response_model=list[ConversationListItem])
 async def list_conversations(
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> list[ConversationListItem]:
-    stmt = (
-        select(
-            Conversation,
-            func.count(Message.id).label("message_count"),
-        )
-        .outerjoin(Message, Message.conversation_id == Conversation.id)
-        .where(Conversation.user_id == current_user.id)
-        .group_by(Conversation.id)
-        .order_by(Conversation.updated_at.desc())
-    )
-    result = await db.execute(stmt)
-    rows = result.all()
-
-    items = []
-    for conv, msg_count in rows:
-        item = ConversationListItem(
+    rows = await conversation_repo.list_conversations_for_user(current_user.id)
+    return [
+        ConversationListItem(
             id=conv.id,
             title=conv.title,
             dataset_name=conv.dataset_name,
@@ -57,26 +52,17 @@ async def list_conversations(
             updated_at=conv.updated_at,
             message_count=msg_count,
         )
-        items.append(item)
-
-    return items
+        for conv, msg_count in rows
+    ]
 
 
 @router.post("", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
 async def create_conversation(
     body: CreateConversationRequest,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConversationResponse:
     title = body.title or _auto_title(body.dataset_name)
-    conv = Conversation(
-        user_id=current_user.id,
-        title=title,
-        dataset_name=body.dataset_name,
-    )
-    db.add(conv)
-    await db.commit()
-    await db.refresh(conv)
+    conv = await conversation_repo.create_conversation(current_user.id, title, body.dataset_name)
 
     return ConversationResponse(
         id=conv.id,
@@ -92,22 +78,14 @@ async def create_conversation(
 async def update_conversation(
     conversation_id: str,
     body: UpdateConversationRequest,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConversationResponse:
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.id == conversation_id,
-            Conversation.user_id == current_user.id,
-        )
-    )
-    conv = result.scalar_one_or_none()
+    conv = await conversation_repo.get_conversation(conversation_id, current_user.id)
     if conv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    conv.title = body.title
-    await db.commit()
-    await db.refresh(conv)
+    await conversation_repo.update_conversation_title(conversation_id, body.title)
+    conv = await conversation_repo.get_conversation(conversation_id, current_user.id)
 
     return ConversationResponse(
         id=conv.id,
@@ -122,62 +100,29 @@ async def update_conversation(
 async def create_message(
     conversation_id: str,
     body: CreateMessageRequest,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MessageResponse:
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.id == conversation_id,
-            Conversation.user_id == current_user.id,
-        )
-    )
-    conv = result.scalar_one_or_none()
+    conv = await conversation_repo.get_conversation(conversation_id, current_user.id)
     if conv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    msg = Message(
-        conversation_id=conversation_id,
-        role=body.role,
-        content_type=body.content_type,
-        payload=json.dumps(body.payload),
+    msg = await conversation_repo.create_message(
+        conversation_id, body.role, body.content_type, body.payload
     )
-    db.add(msg)
-    conv.updated_at = datetime.now(timezone.utc)
-    await db.commit()
-    await db.refresh(msg)
 
-    return MessageResponse(
-        id=msg.id,
-        conversation_id=msg.conversation_id,
-        role=msg.role,
-        content_type=msg.content_type,
-        payload=json.loads(msg.payload) if isinstance(msg.payload, str) else msg.payload,
-        created_at=msg.created_at,
-    )
+    return _to_msg_response(msg)
 
 
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation_id: str,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ConversationResponse:
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.id == conversation_id,
-            Conversation.user_id == current_user.id,
-        )
-    )
-    conv = result.scalar_one_or_none()
+    conv = await conversation_repo.get_conversation(conversation_id, current_user.id)
     if conv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    msg_result = await db.execute(
-        select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(Message.created_at)
-    )
-    messages = msg_result.scalars().all()
+    messages = await conversation_repo.list_messages(conversation_id)
 
     return ConversationResponse(
         id=conv.id,
@@ -185,32 +130,17 @@ async def get_conversation(
         dataset_name=conv.dataset_name,
         created_at=conv.created_at,
         updated_at=conv.updated_at,
-        messages=[MessageResponse(
-            id=m.id,
-            conversation_id=m.conversation_id,
-            role=m.role,
-            content_type=m.content_type,
-            payload=json.loads(m.payload) if isinstance(m.payload, str) else m.payload,
-            created_at=m.created_at,
-        ) for m in messages],
+        messages=[_to_msg_response(m) for m in messages],
     )
 
 
 @router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_conversation(
     conversation_id: str,
-    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    result = await db.execute(
-        select(Conversation).where(
-            Conversation.id == conversation_id,
-            Conversation.user_id == current_user.id,
-        )
-    )
-    conv = result.scalar_one_or_none()
+    conv = await conversation_repo.get_conversation(conversation_id, current_user.id)
     if conv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
 
-    await db.delete(conv)
-    await db.commit()
+    await conversation_repo.delete_conversation(conversation_id)

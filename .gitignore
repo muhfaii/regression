@@ -15,3 +15,10 @@ frontend/src/**/*.js
 
 # SQLite database files
 data/
+
+# Generated Pyodide Python sources
+frontend/src/pyodide-src/
+
+# Node / Wrangler
+node_modules/
+.wrangler/

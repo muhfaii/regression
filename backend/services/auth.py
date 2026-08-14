@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 
 import bcrypt as _bcrypt
 from jose import JWTError, jwt
 
-SECRET_KEY = "infera-secret-key-change-in-production"
+SECRET_KEY = os.environ.get("JWT_SECRET", "infera-dev-secret-do-not-use-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 

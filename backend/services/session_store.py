@@ -106,6 +106,22 @@ def create_session(
     return session_id
 
 
+def find_session_for_conversation(conversation_id: str) -> Session | None:
+    """Find a session by its conversation_id."""
+    _load_all_from_disk()
+    for session in _store.values():
+        if session.conversation_id == conversation_id:
+            return session
+    _ensure_dir()
+    for p in _SESSIONS_DIR.glob("*.pkl"):
+        if p.stem in _store:
+            continue
+        session = _load_from_disk(p.stem)
+        if session and session.conversation_id == conversation_id:
+            return session
+    return None
+
+
 def get_session(session_id: str) -> Session | None:
     if session_id in _store:
         return _store[session_id]
@@ -139,16 +155,16 @@ def get_result(session_id: str, result_id: str) -> dict | None:
         return session.results.get(result_id)
 
 
-# Share token store — no TTL (tokens are UUID-keyed result snapshots)
-_share_store: dict[str, dict] = {}
+async def save_share(token: str, result: dict) -> None:
+    from backend.services import share_repo
+
+    await share_repo.save_share(token, result)
 
 
-def save_share(token: str, result: dict) -> None:
-    _share_store[token] = result
+async def get_share(token: str) -> dict | None:
+    from backend.services import share_repo
 
-
-def get_share(token: str) -> dict | None:
-    return _share_store.get(token)
+    return await share_repo.get_share(token)
 
 
 # Session-level share store — bundles multiple results + dataset filename
@@ -165,8 +181,7 @@ def get_share_session(token: str) -> dict | None:
 
 async def persist_result_to_db(session_id: str, result_id: str) -> None:
     """Persist an analysis result as a Message in the associated conversation."""
-    from backend.database import async_session_factory
-    from backend.models.conversation import Message
+    from backend.services import conversation_repo
 
     session = get_session(session_id)
     if session is None or session.conversation_id is None:
@@ -176,15 +191,9 @@ async def persist_result_to_db(session_id: str, result_id: str) -> None:
     if result is None:
         return
 
-    async with async_session_factory() as db:
-        msg = Message(
-            conversation_id=session.conversation_id,
-            role="assistant",
-            content_type="result",
-            payload=json.dumps(result, default=str),
-        )
-        db.add(msg)
-        await db.commit()
+    await conversation_repo.create_message(
+        session.conversation_id, "assistant", "result", json.loads(json.dumps(result, default=str))
+    )
 
 
 async def cleanup_loop() -> None:

@@ -1,0 +1,52 @@
+{
+	"name": "infera",
+	"main": "worker/src/index.ts",
+	"compatibility_date": "2026-08-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"routes": [
+		{
+			"pattern": "infera.byopre.com",
+			"custom_domain": true
+		}
+	],
+	"assets": {
+		"directory": "frontend/dist",
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application"
+	},
+	"containers": [
+		{
+			"image": "./Dockerfile",
+			"class_name": "InferaBackend",
+			"max_instances": 1
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "BACKEND",
+				"class_name": "InferaBackend"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"InferaBackend"
+			]
+		}
+	],
+	// Only used by `wrangler d1 migrations` tooling — the FastAPI app itself
+	// reaches D1 over its HTTP REST API (backend/services/d1.py), since
+	// Containers can't use the native env.DB binding.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "infera-db",
+			"database_id": "2b88f2d9-d2b6-4267-8e39-68718f50608b"
+		}
+	]
+}

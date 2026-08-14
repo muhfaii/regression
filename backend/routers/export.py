@@ -54,13 +54,13 @@ async def create_share_link(result_id: str, session_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Result not found.")
 
     token = str(uuid.uuid4())
-    session_store.save_share(token, raw)
+    await session_store.save_share(token, raw)
     return {"token": token, "url": f"/share/{token}"}
 
 
 @router.get("/api/share/{token}")
 async def get_shared_result(token: str) -> dict:
-    raw = session_store.get_share(token)
+    raw = await session_store.get_share(token)
     if raw is None:
         raise HTTPException(status_code=404, detail="Share link not found.")
     return _normalize(raw)
