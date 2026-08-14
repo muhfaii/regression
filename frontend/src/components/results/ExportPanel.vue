@@ -15,6 +15,73 @@ const shareUrl = ref<string | null>(null)
 const shareUrlCopied = ref(false)
 const error = ref<string | null>(null)
 
+const compilingReport = ref(false)
+const sharingSession = ref(false)
+const sessionShareUrl = ref<string | null>(null)
+const sessionShareUrlCopied = ref(false)
+const downloadingLog = ref(false)
+
+function _downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function compileReport() {
+  const sid = session.sessionId
+  if (!sid || results.history.length === 0) return
+  compilingReport.value = true
+  error.value = null
+  try {
+    const blob = await api.exportReport(sid)
+    _downloadBlob(blob, 'analysis_report.docx')
+  } catch (e: any) {
+    error.value = e.message ?? 'Report compilation failed.'
+  } finally {
+    compilingReport.value = false
+  }
+}
+
+async function shareSession() {
+  const sid = session.sessionId
+  if (!sid || results.history.length === 0) return
+  sharingSession.value = true
+  error.value = null
+  try {
+    const { url } = await api.createSessionShareLink(sid)
+    sessionShareUrl.value = window.location.origin + url
+  } catch (e: any) {
+    error.value = e.message ?? 'Share failed.'
+  } finally {
+    sharingSession.value = false
+  }
+}
+
+async function copySessionShareUrl() {
+  if (!sessionShareUrl.value) return
+  await navigator.clipboard.writeText(sessionShareUrl.value)
+  sessionShareUrlCopied.value = true
+  setTimeout(() => { sessionShareUrlCopied.value = false }, 1500)
+}
+
+async function downloadLog() {
+  const sid = session.sessionId
+  if (!sid) return
+  downloadingLog.value = true
+  error.value = null
+  try {
+    const blob = await api.downloadSessionLog(sid)
+    _downloadBlob(blob, 'analysis_log.txt')
+  } catch (e: any) {
+    error.value = e.message ?? 'Log download failed.'
+  } finally {
+    downloadingLog.value = false
+  }
+}
+
 async function copyApa() {
   const apa = results.activeResult?.interpretation?.apa
   if (!apa) return
@@ -31,12 +98,7 @@ async function downloadWord() {
   error.value = null
   try {
     const blob = await api.exportWord(result.result_id, sid)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${result.test_key}_results.docx`
-    a.click()
-    URL.revokeObjectURL(url)
+    _downloadBlob(blob, `${result.test_key}_results.docx`)
   } catch (e: any) {
     error.value = e.message ?? 'Download failed.'
   } finally {
@@ -96,6 +158,30 @@ async function copyShareUrl() {
       <input class="share-input" :value="shareUrl" readonly />
       <button class="export-btn share-copy-btn" @click="copyShareUrl">
         {{ shareUrlCopied ? '✓' : 'Copy' }}
+      </button>
+    </div>
+
+    <template v-if="results.history.length > 1">
+      <h3 class="panel-title">Full session</h3>
+      <div class="export-actions">
+        <button class="export-btn" @click="compileReport" :disabled="compilingReport">
+          {{ compilingReport ? 'Compiling…' : `Compile report (${results.history.length} results)` }}
+        </button>
+        <button v-if="!sessionShareUrl" class="export-btn" @click="shareSession" :disabled="sharingSession">
+          {{ sharingSession ? 'Generating…' : 'Share all results' }}
+        </button>
+      </div>
+      <div v-if="sessionShareUrl" class="share-row">
+        <input class="share-input" :value="sessionShareUrl" readonly />
+        <button class="export-btn share-copy-btn" @click="copySessionShareUrl">
+          {{ sessionShareUrlCopied ? '✓' : 'Copy' }}
+        </button>
+      </div>
+    </template>
+
+    <div class="export-actions">
+      <button class="export-btn" @click="downloadLog" :disabled="downloadingLog">
+        {{ downloadingLog ? 'Preparing…' : 'Download analysis log' }}
       </button>
     </div>
 

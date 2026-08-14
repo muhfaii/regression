@@ -11,6 +11,7 @@ from backend.analysis_modules import (
     descriptive,
     factor_analysis,
     logistic,
+    mediation,
     mixed_anova,
     moderation,
     multicomp,
@@ -91,11 +92,18 @@ def test_descriptive_single(continuous_df):
     assert "score" in result.statistics["variables"]
     s = result.statistics["variables"]["score"]
     assert "mean" in s and "sd" in s and "skewness" in s
+    # Interpretation should report the actual numbers, not just the variable name
+    mean_str = f"{s['mean']:.2f}"
+    assert mean_str in result.interpretation.plain
+    assert mean_str in result.interpretation.apa
 
 
 def test_descriptive_multiple(continuous_df):
     result = descriptive.run(continuous_df, {"variables": ["score", "pre", "post"]}, OPTS)
     assert set(result.statistics["variables"].keys()) == {"score", "pre", "post"}
+    for var in ["score", "pre", "post"]:
+        assert var in result.interpretation.plain
+        assert var in result.interpretation.apa
 
 
 def test_descriptive_missing_vars():
@@ -204,12 +212,18 @@ def test_correlation_happy(continuous_df):
     assert "matrix_spearman" in result.statistics
     assert "matrix_kendall" in result.statistics
     assert result.statistics["n_vars"] == 2
+    # Two-variable interpretation should report the actual r value, not just variable names
+    r = result.statistics["matrix_pearson"][0][1]
+    assert f"{r:.2f}" in result.interpretation.apa
+    assert "pre" in result.interpretation.plain and "post" in result.interpretation.plain
 
 
 def test_correlation_multi_vars(continuous_df):
     result = correlation.run(continuous_df, {"variables": ["score", "pre", "post"]}, OPTS)
     assert result.statistics["n_vars"] == 3
     assert len(result.statistics["matrix_pearson"]) == 3
+    # 3+ variable interpretation should highlight the strongest pairwise correlation
+    assert "strongest" in result.interpretation.plain.lower()
 
 
 def test_correlation_missing_config(continuous_df):
@@ -353,6 +367,21 @@ def test_moderation_happy(continuous_df):
     assert result.statistics["coefficients"]  # at least predictor, moderator, interaction
     assert len(result.statistics["simple_slopes"]) == 3  # -1SD, mean, +1SD
     assert result.effect_size is not None
+    assert result.assumption_checks  # normality + heteroskedasticity checks
+    names = [c.name for c in result.assumption_checks]
+    assert any("Normality" in n for n in names)
+    assert any("Homoscedasticity" in n for n in names)
+    assert len(result.statistics["residuals"]) == result.n_obs
+    assert len(result.statistics["fitted_values"]) == result.n_obs
+
+
+def test_moderation_no_assumption_checks(continuous_df):
+    result = moderation.run(continuous_df, {
+        "outcome": "score",
+        "predictor": "pre",
+        "moderator": "post",
+    }, NO_OPTS)
+    assert result.assumption_checks == []
 
 
 def test_moderation_with_covariates(continuous_df):
@@ -381,6 +410,42 @@ def test_moderation_missing_predictor(continuous_df):
 def test_moderation_missing_moderator(continuous_df):
     with pytest.raises(ValueError, match="moderator is required"):
         moderation.run(continuous_df, {"outcome": "score", "predictor": "pre"}, OPTS)
+
+
+# ---------------------------------------------------------------------------
+# Mediation analysis
+# ---------------------------------------------------------------------------
+
+def test_mediation_happy(continuous_df):
+    result = mediation.run(continuous_df, {
+        "outcome": "score",
+        "predictor": "pre",
+        "mediator": "post",
+    }, OPTS)
+    assert result.test_key == "mediation"
+    assert "indirect_effect" in result.statistics
+    assert "mediation_type" in result.statistics
+    assert result.effect_size is not None
+    assert result.assumption_checks  # normality + heteroskedasticity checks on the full model
+    names = [c.name for c in result.assumption_checks]
+    assert any("Normality" in n for n in names)
+    assert any("Homoscedasticity" in n for n in names)
+    assert len(result.statistics["residuals"]) == result.n_obs
+    assert len(result.statistics["fitted_values"]) == result.n_obs
+
+
+def test_mediation_no_assumption_checks(continuous_df):
+    result = mediation.run(continuous_df, {
+        "outcome": "score",
+        "predictor": "pre",
+        "mediator": "post",
+    }, NO_OPTS)
+    assert result.assumption_checks == []
+
+
+def test_mediation_missing_mediator(continuous_df):
+    with pytest.raises(ValueError, match="mediator is required"):
+        mediation.run(continuous_df, {"outcome": "score", "predictor": "pre"}, OPTS)
 
 
 # ---------------------------------------------------------------------------
@@ -737,6 +802,8 @@ def test_regression_p_adjust(continuous_df):
         se_type = "auto"
         p_adjust = "bonferroni"
     result = regression.run_ols(continuous_df, "score", ["pre", "post"], options=_AdjOpts())
+    assert len(result.statistics["residuals"]) == result.n_obs
+    assert len(result.statistics["fitted_values"]) == result.n_obs
     assert "p_adjust_method" in result.statistics
     assert result.statistics["p_adjust_method"] == "bonferroni"
     coefs = result.statistics["coefficients"]

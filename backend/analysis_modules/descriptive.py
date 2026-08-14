@@ -41,11 +41,7 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         }
 
     n_total = sum(v["n"] for v in col_stats.values())
-    var_list = ", ".join(variables)
-
-    plain = f"Descriptive statistics computed for: {var_list}."
-    apa = f"Descriptive statistics were computed for the following variable(s): {var_list}."
-    technical = f"N = {n_total}, variables = {var_list}"
+    interp = _build_interpretation(variables, col_stats)
 
     return AnalysisResult(
         test_key="descriptive",
@@ -53,5 +49,31 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         n_obs=n_total,
         statistics={"variables": col_stats},
         assumption_checks=[],
-        interpretation=Interpretation(plain=plain, apa=apa, technical=technical),
+        interpretation=interp,
     )
+
+
+def _build_interpretation(variables: list[str], col_stats: dict) -> Interpretation:
+    if len(variables) == 1:
+        var = variables[0]
+        s = col_stats[var]
+        plain = (
+            f"{var} had a mean of {s['mean']:.2f} (SD = {s['sd']:.2f}, "
+            f"median = {s['median']:.2f}, range = {s['min']:.2f}–{s['max']:.2f}, N = {s['n']})."
+        )
+        apa = f"{var} (M = {s['mean']:.2f}, SD = {s['sd']:.2f}, N = {s['n']})."
+        technical = (
+            f"{var}: N={s['n']}, M={s['mean']:.4f}, SD={s['sd']:.4f}, Mdn={s['median']:.4f}, "
+            f"min={s['min']:.4f}, max={s['max']:.4f}, skew={s['skewness']:.4f}, kurtosis={s['kurtosis']:.4f}"
+        )
+        return Interpretation(plain=plain, apa=apa, technical=technical)
+
+    parts_plain = [f"{v} (M = {col_stats[v]['mean']:.2f}, SD = {col_stats[v]['sd']:.2f})" for v in variables]
+    parts_apa = [f"{v} (M = {col_stats[v]['mean']:.2f}, SD = {col_stats[v]['sd']:.2f})" for v in variables]
+    plain = "Summary statistics: " + "; ".join(parts_plain) + "."
+    apa = "Descriptive statistics were computed for " + ", ".join(parts_apa) + "."
+    technical = "; ".join(
+        f"{v}: N={col_stats[v]['n']}, M={col_stats[v]['mean']:.4f}, SD={col_stats[v]['sd']:.4f}"
+        for v in variables
+    )
+    return Interpretation(plain=plain, apa=apa, technical=technical)

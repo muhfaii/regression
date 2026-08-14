@@ -80,6 +80,8 @@ def run_ols(
         "desc_stats": desc_stats,
         "vif_table": vif_table,
         "remediation": remediation,
+        "fitted_values": [round(float(v), 4) for v in model.fitted],
+        "residuals": [round(float(v), 4) for v in model.residuals],
     }
 
     p_adjust_method = getattr(options, "p_adjust", "none") if options else "none"

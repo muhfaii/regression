@@ -28,6 +28,7 @@ class Session:
     results: dict = field(default_factory=dict)  # result_id → dict
     user_id: str | None = None
     conversation_id: str | None = None
+    steps: list = field(default_factory=list)  # reproducibility log: {timestamp, action, detail}
 
 
 _store: dict[str, Session] = {}
@@ -111,6 +112,20 @@ def get_session(session_id: str) -> Session | None:
     return _load_from_disk(session_id)
 
 
+def update_session_df(session_id: str, df: pd.DataFrame) -> None:
+    session = get_session(session_id)
+    if session:
+        session.df = df
+        _save_to_disk(session_id, session)
+
+
+def log_step(session_id: str, action: str, detail: str) -> None:
+    session = get_session(session_id)
+    if session:
+        session.steps.append({"timestamp": time.time(), "action": action, "detail": detail})
+        _save_to_disk(session_id, session)
+
+
 def save_result(session_id: str, result_id: str, result: dict) -> None:
     session = get_session(session_id)
     if session:
@@ -134,6 +149,18 @@ def save_share(token: str, result: dict) -> None:
 
 def get_share(token: str) -> dict | None:
     return _share_store.get(token)
+
+
+# Session-level share store — bundles multiple results + dataset filename
+_share_session_store: dict[str, dict] = {}
+
+
+def save_share_session(token: str, bundle: dict) -> None:
+    _share_session_store[token] = bundle
+
+
+def get_share_session(token: str) -> dict | None:
+    return _share_session_store.get(token)
 
 
 async def persist_result_to_db(session_id: str, result_id: str) -> None:

@@ -99,6 +99,10 @@ function handleTypeChange(colName: string, type: ColumnType) {
   }
 }
 
+function goToPrep() {
+  router.push({ path: '/prep', query: conversationId.value ? { conversation_id: conversationId.value } : {} })
+}
+
 async function proceed() {
   const cid = conversationId.value
   if (cid) {
@@ -177,7 +181,10 @@ function reset() {
 
         <div class="preview-actions">
           <button class="btn-ghost" @click="reset">Import different data</button>
-          <button class="btn-primary" @click="proceed">Continue to analysis →</button>
+          <div class="preview-actions-right">
+            <button class="btn-ghost" @click="goToPrep">Prepare data</button>
+            <button class="btn-primary" @click="proceed">Continue to analysis →</button>
+          </div>
         </div>
       </div>
     </div>
@@ -268,6 +275,7 @@ function reset() {
   align-items: center;
   margin-top: 8px;
 }
+.preview-actions-right { display: flex; gap: 12px; }
 .btn-primary {
   background: var(--color-primary);
   color: #fff;

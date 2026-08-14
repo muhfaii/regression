@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.database import init_db
-from backend.routers import analysis, auth, conversations, data, export
+from backend.routers import analysis, auth, conversations, data, dataprep, export
 from backend.services.session_store import cleanup_loop
 
 
@@ -31,6 +31,7 @@ app.add_middleware(
 )
 
 app.include_router(data.router)
+app.include_router(dataprep.router)
 app.include_router(analysis.router)
 app.include_router(export.router)
 app.include_router(auth.router)

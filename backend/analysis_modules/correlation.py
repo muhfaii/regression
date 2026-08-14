@@ -94,10 +94,7 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
             interpretation=r_interpretation(r_pearson),
         )
 
-    var_list = ", ".join(variables)
-    plain = f"A correlation matrix was computed for: {var_list} (N = {n})."
-    apa = f"Pearson, Spearman, and Kendall correlation coefficients were computed for {var_list}."
-    technical = f"Correlation matrix — N = {n}, {n_vars} variables"
+    interp = _build_interpretation(variables, n, mat_p, mat_pp)
 
     return AnalysisResult(
         test_key="correlation",
@@ -105,6 +102,83 @@ def run(df: pd.DataFrame, config: dict, options) -> AnalysisResult:
         n_obs=n,
         statistics=statistics,
         assumption_checks=checks,
-        interpretation=Interpretation(plain=plain, apa=apa, technical=technical),
+        interpretation=interp,
         effect_size=effect,
     )
+
+
+def _p_str(p: float) -> str:
+    return "< .001" if p < 0.001 else f"= {p:.3f}"
+
+
+def _strength(r: float) -> str:
+    a = abs(r)
+    if a < 0.1:
+        return "negligible"
+    if a < 0.3:
+        return "weak"
+    if a < 0.5:
+        return "moderate"
+    if a < 0.7:
+        return "strong"
+    return "very strong"
+
+
+def _build_interpretation(
+    variables: list[str], n: int, mat_p: np.ndarray, mat_pp: np.ndarray
+) -> Interpretation:
+    n_vars = len(variables)
+    dof = n - 2
+    var_list = ", ".join(variables)
+
+    if n_vars == 2:
+        r = float(mat_p[0, 1])
+        p = float(mat_pp[0, 1])
+        direction = "positive" if r >= 0 else "negative"
+        strength = _strength(r)
+        sig = p < 0.05
+
+        plain = (
+            f"There was a {strength} {direction} correlation between {variables[0]} and {variables[1]}, "
+            f"r({dof}) = {r:.3f}, p {_p_str(p)}"
+            f"{', which is statistically significant.' if sig else ', which is not statistically significant.'} "
+            f"Spearman and Kendall coefficients are also reported for comparison."
+        )
+        apa = (
+            f"A Pearson correlation was conducted to examine the relationship between "
+            f"{variables[0]} and {variables[1]}. There was a {strength} {direction} correlation "
+            f"between the two variables, r({dof}) = {r:.2f}, "
+            f"p {_p_str(p)}, N = {n}."
+        )
+        technical = f"Pearson r = {r:.4f} (p = {p:.4f}), N = {n}, df = {dof}"
+        return Interpretation(plain=plain, apa=apa, technical=technical)
+
+    # 3+ variables: highlight the strongest pairwise relationship
+    best_i, best_j, best_r = 0, 1, 0.0
+    n_sig = 0
+    for i in range(n_vars):
+        for j in range(i + 1, n_vars):
+            if abs(float(mat_p[i, j])) > abs(best_r):
+                best_i, best_j, best_r = i, j, float(mat_p[i, j])
+            if float(mat_pp[i, j]) < 0.05:
+                n_sig += 1
+    best_p = float(mat_pp[best_i, best_j])
+    n_pairs = n_vars * (n_vars - 1) // 2
+
+    plain = (
+        f"A correlation matrix was computed among {n_vars} variables ({var_list}), N = {n}. "
+        f"The strongest relationship was between {variables[best_i]} and {variables[best_j]} "
+        f"({_strength(best_r)} {'positive' if best_r >= 0 else 'negative'}, "
+        f"r({dof}) = {best_r:.3f}, p {_p_str(best_p)}). "
+        f"{n_sig} of {n_pairs} pairwise correlations were statistically significant (p < .05)."
+    )
+    apa = (
+        f"Pearson correlation coefficients were computed among {n_vars} variables ({var_list}), N = {n}. "
+        f"The strongest correlation was observed between {variables[best_i]} and {variables[best_j]}, "
+        f"r({dof}) = {best_r:.2f}, p {_p_str(best_p)}."
+    )
+    technical = (
+        f"N = {n}, {n_vars} variables, {n_pairs} pairs, {n_sig} significant (p < .05) | "
+        f"Strongest: {variables[best_i]}–{variables[best_j]}, r = {best_r:.4f}, p = {best_p:.4f}"
+    )
+    return Interpretation(plain=plain, apa=apa, technical=technical)
