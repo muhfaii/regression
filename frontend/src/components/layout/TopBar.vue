@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { useDatasetStore } from '../../stores/dataset'
 import { useResultsStore } from '../../stores/results'
+import { useThemeStore } from '../../stores/theme'
 import DatasetPill from './DatasetPill.vue'
 
 const route = useRoute()
@@ -11,6 +12,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const dataset = useDatasetStore()
 const results = useResultsStore()
+const theme = useThemeStore()
 
 const showMenu = ref(false)
 
@@ -77,6 +79,14 @@ const initials = computed(() => {
       </button>
     </nav>
     <div class="topbar-right">
+      <button
+        class="theme-toggle"
+        type="button"
+        :aria-label="theme.theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'"
+        @click="theme.toggle"
+      >
+        {{ theme.theme === 'dark' ? 'Light' : 'Dark' }}
+      </button>
       <DatasetPill v-if="auth.isAuthenticated" :filename="dataset.filename" />
       <div v-if="auth.isAuthenticated" class="user-menu" @click="toggleMenu">
         <div class="user-avatar">{{ initials }}</div>
@@ -143,6 +153,21 @@ const initials = computed(() => {
   align-items: center;
   gap: 12px;
   position: relative;
+}
+
+.theme-toggle {
+  border: 1px solid var(--color-border);
+  background: none;
+  color: var(--color-text-muted);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+.theme-toggle:hover {
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 /* User menu */

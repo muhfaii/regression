@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import FileDropZone from '../components/data-import/FileDropZone.vue'
@@ -29,6 +29,12 @@ const error = ref<string | null>(null)
 const preview = ref<DatasetPreview | null>(null)
 const showReimportDialog = ref(false)
 const pendingImport = ref<(() => Promise<void>) | null>(null)
+const reimportDialog = ref<HTMLDialogElement | null>(null)
+
+watch(showReimportDialog, (open) => {
+  if (open) reimportDialog.value?.showModal()
+  else reimportDialog.value?.close()
+})
 
 const noDataMessage = computed(() =>
   route.query.message === 'no_data' ? 'Load a dataset to get started.' : null
@@ -190,7 +196,7 @@ function reset() {
     </div>
 
     <!-- Re-import confirmation dialog -->
-    <dialog :open="showReimportDialog" class="confirm-dialog">
+    <dialog ref="reimportDialog" class="confirm-dialog" @cancel="cancelReimport">
       <p>This will replace your current data. Continue?</p>
       <div class="dialog-actions">
         <button class="btn-ghost" @click="cancelReimport">Cancel</button>

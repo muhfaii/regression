@@ -70,7 +70,7 @@ onMounted(async () => {
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--color-primary);
-  background: #ede9fe;
+  background: var(--color-accent-tint);
   border-radius: 99px;
   padding: 2px 10px;
   width: fit-content;

@@ -479,6 +479,29 @@ function newAnalysis() {
       <h1 class="result-title">{{ result.test_name }}</h1>
       <p class="result-meta">N = {{ result.n_obs }}</p>
 
+      <!-- Interpretation tabs (plain-language summary first, technical detail below) -->
+      <div class="interpretation-section">
+        <h3 class="section-title">Interpretation</h3>
+        <div class="tabs" role="tablist">
+          <button
+            v-for="[key, label] in ([['plain', 'Plain English'], ['apa', 'APA 7'], ['technical', 'Technical']] as [string, string][])"
+            :key="key"
+            class="tab-btn"
+            :class="{ active: activeTab === key }"
+            role="tab"
+            :aria-selected="activeTab === key"
+            @click="activeTab = key as 'plain' | 'apa' | 'technical'"
+          >
+            {{ label }}
+          </button>
+        </div>
+        <div class="tab-content">
+          <p v-if="activeTab === 'plain'">{{ result.interpretation.plain }}</p>
+          <p v-if="activeTab === 'apa'" class="apa-text">{{ result.interpretation.apa }}</p>
+          <p v-if="activeTab === 'technical'" class="mono-text">{{ result.interpretation.technical }}</p>
+        </div>
+      </div>
+
       <!-- Headline stat cards (scalars only) -->
       <div v-if="scalarCards(result.statistics).length" class="stats-cards">
         <div
@@ -576,14 +599,14 @@ function newAnalysis() {
               <td>{{ row.p.toFixed(4) }}</td>
               <td>[{{ row.ci_low }}, {{ row.ci_high }}]</td>
               <td>
-                <span v-if="row.significant" class="badge-sig" style="font-size:12px;font-weight:700;color:#4c1d95;background:#ede9fe;padding:2px 8px;border-radius:10px;">p &lt; 0.05</span>
-                <span v-else class="badge-ns" style="font-size:12px;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:10px;">n.s.</span>
+                <span v-if="row.significant" class="badge-sig" style="font-size:12px;font-weight:700;color:var(--color-accent);background:var(--color-accent-tint);padding:2px 8px;border-radius:10px;">p &lt; 0.05</span>
+                <span v-else class="badge-ns" style="font-size:12px;color:var(--color-text-muted);background:var(--surface-2);padding:2px 8px;border-radius:10px;">n.s.</span>
               </td>
             </tr>
           </tbody>
         </table>
-        <p v-if="seCitation" style="margin-top:8px;font-size:13px;color:#374151;">{{ seCitation }}</p>
-        <p v-if="seJustification" style="margin-top:4px;font-size:12px;color:#6b7280;font-style:italic;">{{ seJustification }}</p>
+        <p v-if="seCitation" style="margin-top:8px;font-size:13px;color:var(--color-text-secondary);">{{ seCitation }}</p>
+        <p v-if="seJustification" style="margin-top:4px;font-size:12px;color:var(--color-text-muted);font-style:italic;">{{ seJustification }}</p>
       </div>
 
       <!-- Residuals vs fitted values (OLS-based models) -->
@@ -1332,29 +1355,6 @@ function newAnalysis() {
         </div>
       </div>
 
-      <!-- Interpretation tabs -->
-      <div class="interpretation-section">
-        <h3 class="section-title">Interpretation</h3>
-        <div class="tabs" role="tablist">
-          <button
-            v-for="[key, label] in ([['plain', 'Plain English'], ['apa', 'APA 7'], ['technical', 'Technical']] as [string, string][])"
-            :key="key"
-            class="tab-btn"
-            :class="{ active: activeTab === key }"
-            role="tab"
-            :aria-selected="activeTab === key"
-            @click="activeTab = key as 'plain' | 'apa' | 'technical'"
-          >
-            {{ label }}
-          </button>
-        </div>
-        <div class="tab-content">
-          <p v-if="activeTab === 'plain'">{{ result.interpretation.plain }}</p>
-          <p v-if="activeTab === 'apa'" class="apa-text">{{ result.interpretation.apa }}</p>
-          <p v-if="activeTab === 'technical'" class="mono-text">{{ result.interpretation.technical }}</p>
-        </div>
-      </div>
-
       <!-- Warnings -->
       <div v-if="result.warnings.length" class="warnings-section">
         <p v-for="w in result.warnings" :key="w" class="warning-item">⚠ {{ w }}</p>
@@ -1386,7 +1386,7 @@ function newAnalysis() {
 }
 .history-item { font-size: 13px; padding: 6px 8px; border-radius: 6px; cursor: pointer; color: var(--color-text); transition: background 0.1s; }
 .history-item:hover { background: var(--color-surface); }
-.history-item.active { background: #ede9fe; color: var(--color-primary); font-weight: 600; }
+.history-item.active { background: var(--color-accent-tint); color: var(--color-primary); font-weight: 600; }
 .signin-nudge { font-size: 11px; color: var(--color-text-muted); border-top: 1px solid var(--color-border); padding-top: 10px; margin-top: auto; }
 .results-main { flex: 1; overflow-y: auto; padding: 32px; display: flex; flex-direction: column; gap: 24px; }
 .result-title { font-size: 22px; }
@@ -1418,7 +1418,7 @@ function newAnalysis() {
 .data-table td { padding: 7px 12px; border-bottom: 1px solid var(--color-border); }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table .group-name { font-weight: 600; }
-.sig-row td { background: #f0fdf4; }
+.sig-row td { background: var(--color-green-bg); }
 .factor-heading { font-size: 13px; font-weight: 600; margin: 8px 0 4px; color: var(--color-primary); }
 .bf-table { margin-bottom: 8px; }
 .subtitle { font-size: 12px; font-weight: 400; color: var(--color-text-muted); margin-left: 6px; }
@@ -1431,9 +1431,9 @@ function newAnalysis() {
 /* Assumption checks */
 .assumptions-section { display: flex; flex-direction: column; gap: 8px; }
 .check-item { display: flex; gap: 10px; padding: 10px 14px; border-radius: 8px; font-size: 13px; border: 1px solid transparent; }
-.check-pass { background: var(--color-green-bg); border-color: #bbf7d0; }
-.check-amber { background: var(--color-amber-bg); border-color: #fde68a; }
-.check-fail { background: #fef2f2; border-color: #fecaca; }
+.check-pass { background: var(--color-green-bg); border-color: var(--color-green-border); }
+.check-amber { background: var(--color-amber-bg); border-color: var(--color-amber-border); }
+.check-fail { background: var(--color-red-bg); border-color: var(--color-red-border); }
 .check-icon { font-weight: 700; font-size: 14px; flex-shrink: 0; }
 .check-pass .check-icon { color: var(--color-green); }
 .check-amber .check-icon { color: var(--color-amber); }
@@ -1537,8 +1537,8 @@ function newAnalysis() {
   border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px;
   min-width: 160px; flex: 1; display: flex; flex-direction: column; gap: 4px;
 }
-.test-pass { background: #f0fdf4; border-color: #bbf7d0; }
-.test-fail { background: #fef2f2; border-color: #fecaca; }
+.test-pass { background: var(--color-green-bg); border-color: var(--color-green-border); }
+.test-fail { background: var(--color-red-bg); border-color: var(--color-red-border); }
 .test-card-title { font-weight: 700; font-size: 14px; }
 .test-card-stat { font-size: 13px; color: var(--color-text-muted); }
 .test-card-verdict { font-size: 12px; font-weight: 700; margin-top: 4px; }
@@ -1578,15 +1578,15 @@ function newAnalysis() {
 .spark-dot { font-size: 6px; color: var(--color-primary); }
 
 .mediation-badge { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 10px; text-transform: capitalize; }
-.mediation-none { background: #e5e7eb; color: #374151; }
-.mediation-partial { background: #fef3c7; color: #92400e; }
-.mediation-full { background: #d1fae5; color: #065f46; }
+.mediation-none { background: var(--surface-2); color: var(--color-text-secondary); }
+.mediation-partial { background: var(--color-amber-bg); color: var(--color-amber); }
+.mediation-full { background: var(--color-green-bg); color: var(--color-green); }
 
 /* VIF badges */
 .vif-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
-.vif-concern { background: #fee2e2; color: #991b1b; }
-.vif-examine { background: #fef3c7; color: #92400e; }
-.vif-ok { background: #d1fae5; color: #065f46; }
+.vif-concern { background: var(--color-red-bg); color: var(--color-red); }
+.vif-examine { background: var(--color-amber-bg); color: var(--color-amber); }
+.vif-ok { background: var(--color-green-bg); color: var(--color-green); }
 
 /* Robustness card */
 .robustness-card {
@@ -1605,9 +1605,9 @@ function newAnalysis() {
   border-radius: 6px; padding: 12px 16px;
   border: 1px solid var(--color-border);
 }
-.pattern-high { background: #fff1f2; border-left: 4px solid #f43f5e; }
-.pattern-medium { background: #fffbeb; border-left: 4px solid #f59e0b; }
-.pattern-low { background: #eff6ff; border-left: 4px solid #3b82f6; }
+.pattern-high { background: var(--color-red-bg); border-left: 4px solid var(--color-red); }
+.pattern-medium { background: var(--color-amber-bg); border-left: 4px solid var(--color-amber); }
+.pattern-low { background: var(--color-accent-tint); border-left: 4px solid var(--color-accent); }
 .pattern-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
 .pattern-interp { font-size: 13px; color: var(--color-text-muted); margin-bottom: 6px; }
 .pattern-rec { font-size: 13px; font-style: italic; color: var(--color-text); }
@@ -1616,8 +1616,8 @@ function newAnalysis() {
 .remedy-group { margin-bottom: 16px; }
 .remedy-group-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
 .remedy-verdict-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; letter-spacing: 0.04em; }
-.verdict-fail { background: #fee2e2; color: #991b1b; }
-.verdict-borderline { background: #fef3c7; color: #92400e; }
+.verdict-fail { background: var(--color-red-bg); color: var(--color-red); }
+.verdict-borderline { background: var(--color-amber-bg); color: var(--color-amber); }
 .remedy-card {
   border: 1px solid var(--color-border); border-radius: 6px;
   padding: 10px 14px; margin-bottom: 8px; font-size: 13px;
@@ -1626,12 +1626,12 @@ function newAnalysis() {
 .remedy-num { color: var(--color-text-muted); font-size: 12px; min-width: 20px; }
 .remedy-desc { font-weight: 500; }
 .remedy-kind { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; margin-left: auto; }
-.kind-quick_fix { background: #d1fae5; color: #065f46; }
-.kind-thinking_fix { background: #f3f4f6; color: #6b7280; }
+.kind-quick_fix { background: var(--color-green-bg); color: var(--color-green); }
+.kind-thinking_fix { background: var(--surface-2); color: var(--color-text-muted); }
 .remedy-why { font-size: 12px; color: var(--color-text-muted); margin-left: 28px; }
 .remedy-caveat {
-  font-size: 12px; color: #78350f; background: #fffbeb;
-  border: 1px solid #fcd34d; border-radius: 6px;
+  font-size: 12px; color: var(--color-amber); background: var(--color-amber-bg);
+  border: 1px solid var(--color-amber-border); border-radius: 6px;
   padding: 8px 12px; margin-bottom: 10px;
 }
 
@@ -1642,7 +1642,7 @@ function newAnalysis() {
 .test-card-stat { font-size: 13px; color: var(--color-text); }
 .test-card-verdict { font-size: 12px; font-weight: 600; margin-top: 4px; }
 .chart-wrapper { height: 320px; padding: 12px 0; }
-.warning-banner { background: #fef3c7; border: 1px solid #fcd34d; color: #78350f; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+.warning-banner { background: var(--color-amber-bg); border: 1px solid var(--color-amber-border); color: var(--color-amber); padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
 .cox-fit-card { margin-top: 10px; padding: 8px 12px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 6px; font-size: 13px; }
 .cox-fit-label { color: var(--color-text-muted); }
 
@@ -1656,8 +1656,8 @@ function newAnalysis() {
 .fit-card-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--color-text-muted); margin-bottom: 4px; }
 .fit-card-value { font-size: 24px; font-weight: 700; }
 .fit-card-ci { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
-.fit-good { border-color: #86efac; background: #f0fdf4; }
-.fit-acceptable { border-color: #fcd34d; background: #fffbeb; }
-.fit-poor { border-color: #fca5a5; background: #fef2f2; }
+.fit-good { border-color: var(--color-green-border); background: var(--color-green-bg); }
+.fit-acceptable { border-color: var(--color-amber-border); background: var(--color-amber-bg); }
+.fit-poor { border-color: var(--color-red-border); background: var(--color-red-bg); }
 .chi2-display { font-size: 13px; color: var(--color-text-muted); margin: 0 0 12px; }
 </style>

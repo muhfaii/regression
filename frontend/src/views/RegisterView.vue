@@ -14,6 +14,8 @@ const error = ref<string | null>(null)
 const loading = ref(false)
 
 const passwordsMatch = computed(() => password.value === confirmPassword.value)
+const showPassword = ref(false)
+const showConfirmPassword = ref(false)
 
 async function handleRegister() {
   if (!passwordsMatch.value) {
@@ -70,20 +72,38 @@ async function handleRegister() {
 
         <label class="field">
           <span class="field-label">Password</span>
-          <input v-model="password" type="password" class="field-input" placeholder="At least 4 characters" required autocomplete="new-password" />
+          <div class="password-wrap">
+            <input
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              class="field-input"
+              placeholder="At least 4 characters"
+              required
+              autocomplete="new-password"
+            />
+            <button type="button" class="password-toggle" @click="showPassword = !showPassword">
+              {{ showPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
         </label>
 
         <label class="field">
           <span class="field-label">Confirm password</span>
-          <input
-            v-model="confirmPassword"
-            type="password"
-            class="field-input"
-            :class="{ 'input-mismatch': confirmPassword && !passwordsMatch }"
-            placeholder="Repeat your password"
-            required
-            autocomplete="new-password"
-          />
+          <div class="password-wrap">
+            <input
+              v-model="confirmPassword"
+              :type="showConfirmPassword ? 'text' : 'password'"
+              class="field-input"
+              :class="{ 'input-mismatch': confirmPassword && !passwordsMatch }"
+              placeholder="Repeat your password"
+              required
+              autocomplete="new-password"
+            />
+            <button type="button" class="password-toggle" @click="showConfirmPassword = !showConfirmPassword">
+              {{ showConfirmPassword ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+          <span v-if="confirmPassword && !passwordsMatch" class="field-error">Passwords do not match.</span>
         </label>
 
         <div v-if="error" class="error-msg" role="alert">{{ error }}</div>
@@ -128,6 +148,23 @@ async function handleRegister() {
 }
 .field-input:focus { outline: 2px solid var(--color-primary); outline-offset: -1px; }
 .input-mismatch { border-color: var(--color-red); }
+.password-wrap { position: relative; display: flex; }
+.password-wrap .field-input { flex: 1; padding-right: 52px; }
+.password-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+.password-toggle:hover { color: var(--color-text); }
+.field-error { font-size: 12px; color: var(--color-red); }
 .error-msg {
   background: #fef2f2;
   border: 1px solid #fecaca;
