@@ -44,7 +44,9 @@ export function useApi() {
     }
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch(`${BASE}/data/upload${_query(conversationId)}`, { method: 'POST', body: form })
+    const res = await fetch(`${BASE}/data/upload${_query(conversationId)}`, {
+      method: 'POST', headers: authHeaders(), body: form,
+    })
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
       throw new Error(body.detail ?? 'Upload failed')
@@ -66,7 +68,7 @@ export function useApi() {
     }
     const res = await fetch(`${BASE}/data/paste${_query(conversationId)}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({ text }),
     })
     if (!res.ok) {
@@ -190,7 +192,7 @@ export function useApi() {
   async function exportWord(resultId: string, sessionId: string): Promise<Blob> {
     const res = await fetch(
       `${BASE}/export/word/${resultId}?session_id=${encodeURIComponent(sessionId)}`,
-      { method: 'POST' },
+      { method: 'POST', headers: authHeaders() },
     )
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))

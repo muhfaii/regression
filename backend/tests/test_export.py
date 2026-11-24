@@ -10,8 +10,9 @@ CSV = b"score,pre,post\n50,40,45\n55,42,47\n48,38,44\n60,45,50\n52,41,46\n58,44,
 
 
 @pytest.fixture
-def client():
-    with TestClient(app) as c:
+def client(make_user):
+    _, headers = make_user()
+    with TestClient(app, headers=headers) as c:
         yield c
 
 

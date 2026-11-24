@@ -7,11 +7,13 @@ from pathlib import Path
 
 import pandas as pd
 import pyreadstat
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from backend.middleware import get_current_user
+from backend.models.user import User
 from backend.schemas.data import DatasetPreview
-from backend.services import column_inference, dataset_context, session_store
+from backend.services import column_inference, conversation_repo, dataset_context, limits, session_store
 from regassist.ingest import load_file
 
 router = APIRouter(prefix="/api/data", tags=["data"])
@@ -30,6 +32,11 @@ def _build_preview(df, ingest, filename, session_id, conversation_id=None):
         conversation_id=conversation_id,
     )
 
+async def _require_own_conversation(conversation_id: str | None, user: User) -> None:
+    if conversation_id and await conversation_repo.get_conversation(conversation_id, user.id) is None:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+
 _SAMPLE_DIR = Path(__file__).parent.parent.parent / "sample_data"
 _SAMPLES = {
     "clean_wages": {"label": "Clean Wages", "file": "clean_wages.csv", "description": "Wage data for OLS regression"},
@@ -40,8 +47,13 @@ _SAMPLES = {
 
 
 @router.post("/upload", response_model=DatasetPreview)
-async def upload_file(file: UploadFile, conversation_id: str | None = None) -> DatasetPreview:
-    raw = await file.read()
+async def upload_file(
+    file: UploadFile,
+    conversation_id: str | None = None,
+    current_user: User = Depends(get_current_user),
+) -> DatasetPreview:
+    await _require_own_conversation(conversation_id, current_user)
+    raw = await limits.read_upload(file)
     filename = file.filename or "upload"
 
     try:
@@ -64,7 +76,9 @@ async def upload_file(file: UploadFile, conversation_id: str | None = None) -> D
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    session_id = session_store.create_session(df, filename, conversation_id=conversation_id)
+    session_id = session_store.create_session(
+        df, filename, user_id=current_user.id, conversation_id=conversation_id
+    )
     session_store.log_step(
         session_id, "Import",
         f"Imported '{filename}' ({ingest.row_count} rows, {len(ingest.columns)} columns).",
@@ -73,10 +87,17 @@ async def upload_file(file: UploadFile, conversation_id: str | None = None) -> D
 
 
 @router.post("/paste", response_model=DatasetPreview)
-async def paste_data(body: dict, conversation_id: str | None = None) -> DatasetPreview:
+async def paste_data(
+    body: dict,
+    conversation_id: str | None = None,
+    current_user: User = Depends(get_current_user),
+) -> DatasetPreview:
+    await _require_own_conversation(conversation_id, current_user)
     text = body.get("text", "")
     if not text.strip():
         raise HTTPException(status_code=422, detail="No text provided.")
+    if len(text) > limits.MAX_PASTE_CHARS:
+        raise HTTPException(status_code=413, detail="Pasted data is too large.")
 
     lines = text.strip().splitlines()
     tab_count = sum(l.count("\t") for l in lines[:5])
@@ -102,7 +123,9 @@ async def paste_data(body: dict, conversation_id: str | None = None) -> DatasetP
         for c in df.columns
     ]
     ingest = IngestResult(df=df, row_count=len(df), columns=cols)
-    session_id = session_store.create_session(df, "pasted_data.csv", conversation_id=conversation_id)
+    session_id = session_store.create_session(
+        df, "pasted_data.csv", user_id=current_user.id, conversation_id=conversation_id
+    )
     session_store.log_step(
         session_id, "Import",
         f"Imported pasted data ({ingest.row_count} rows, {len(ingest.columns)} columns).",
@@ -120,7 +143,12 @@ async def list_samples() -> list[dict]:
 
 
 @router.get("/samples/{sample_id}", response_model=DatasetPreview)
-async def load_sample(sample_id: str, conversation_id: str | None = None) -> DatasetPreview:
+async def load_sample(
+    sample_id: str,
+    conversation_id: str | None = None,
+    current_user: User = Depends(get_current_user),
+) -> DatasetPreview:
+    await _require_own_conversation(conversation_id, current_user)
     if sample_id not in _SAMPLES:
         raise HTTPException(status_code=404, detail="Sample not found.")
 
@@ -135,7 +163,9 @@ async def load_sample(sample_id: str, conversation_id: str | None = None) -> Dat
         raise HTTPException(status_code=422, detail=str(exc))
 
     df = ingest.df
-    session_id = session_store.create_session(df, sample["file"], conversation_id=conversation_id)
+    session_id = session_store.create_session(
+        df, sample["file"], user_id=current_user.id, conversation_id=conversation_id
+    )
     session_store.log_step(
         session_id, "Import",
         f"Loaded sample dataset '{sample['label']}' ({ingest.row_count} rows, {len(ingest.columns)} columns).",

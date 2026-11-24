@@ -128,6 +128,14 @@ def get_session(session_id: str) -> Session | None:
     return _load_from_disk(session_id)
 
 
+def get_owned_session(session_id: str, user_id: str) -> Session | None:
+    """Return the session only if it belongs to `user_id`."""
+    session = get_session(session_id)
+    if session is None or session.user_id != user_id:
+        return None
+    return session
+
+
 def update_session_df(session_id: str, df: pd.DataFrame) -> None:
     session = get_session(session_id)
     if session:
@@ -147,12 +155,6 @@ def save_result(session_id: str, result_id: str, result: dict) -> None:
     if session:
         session.results[result_id] = result
         _save_to_disk(session_id, session)
-
-
-def get_result(session_id: str, result_id: str) -> dict | None:
-    session = get_session(session_id)
-    if session:
-        return session.results.get(result_id)
 
 
 async def save_share(token: str, result: dict) -> None:

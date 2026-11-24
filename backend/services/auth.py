@@ -6,7 +6,9 @@ from datetime import datetime, timedelta, timezone
 import bcrypt as _bcrypt
 from jose import JWTError, jwt
 
-SECRET_KEY = os.environ.get("JWT_SECRET", "infera-dev-secret-do-not-use-in-production")
+SECRET_KEY = os.environ.get("JWT_SECRET", "")
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET environment variable must be set.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 

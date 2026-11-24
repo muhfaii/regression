@@ -1,8 +1,10 @@
 """Data preparation endpoints: /api/dataprep/*"""
 from __future__ import annotations
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
 
+from backend.middleware import get_current_user
+from backend.models.user import User
 from backend.schemas.data import DatasetPreview
 from backend.schemas.dataprep import (
     ComputeRequest,
@@ -10,15 +12,15 @@ from backend.schemas.dataprep import (
     RecodeRequest,
     ReverseScoreRequest,
 )
-from backend.services import column_inference, dataprep, dataset_context, session_store
+from backend.services import column_inference, dataprep, dataset_context, limits, session_store
 from backend.services.session_store import Session
 from regassist.ingest import _collect_warnings, _describe_column, load_file
 
 router = APIRouter(prefix="/api/dataprep", tags=["dataprep"])
 
 
-def _get_session_or_404(session_id: str) -> Session:
-    session = session_store.get_session(session_id)
+def _get_session_or_404(session_id: str, user: User) -> Session:
+    session = session_store.get_owned_session(session_id, user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
     return session
@@ -42,8 +44,8 @@ def _apply_and_respond(session: Session, session_id: str, new_df, message: str) 
 
 
 @router.post("/missing", response_model=DatasetPreview)
-async def apply_missing(req: MissingDataRequest) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id)
+async def apply_missing(req: MissingDataRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
+    session = _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.apply_missing_strategy(session.df, req.columns, req.strategy, req.constant)
     except ValueError as exc:
@@ -52,8 +54,8 @@ async def apply_missing(req: MissingDataRequest) -> DatasetPreview:
 
 
 @router.post("/recode", response_model=DatasetPreview)
-async def recode(req: RecodeRequest) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id)
+async def recode(req: RecodeRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
+    session = _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.recode_column(
             session.df, req.source_column, req.new_column_name, req.mapping, req.default, req.overwrite,
@@ -64,8 +66,8 @@ async def recode(req: RecodeRequest) -> DatasetPreview:
 
 
 @router.post("/compute", response_model=DatasetPreview)
-async def compute(req: ComputeRequest) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id)
+async def compute(req: ComputeRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
+    session = _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.compute_column(
             session.df, req.new_column_name, req.expression, req.overwrite,
@@ -76,8 +78,8 @@ async def compute(req: ComputeRequest) -> DatasetPreview:
 
 
 @router.post("/reverse-score", response_model=DatasetPreview)
-async def reverse_score(req: ReverseScoreRequest) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id)
+async def reverse_score(req: ReverseScoreRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
+    session = _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.reverse_score(
             session.df, req.columns, req.min_value, req.max_value, req.suffix, req.overwrite,
@@ -94,12 +96,13 @@ async def merge(
     right_on: str = Form(...),
     how: str = Form("left"),
     file: UploadFile = None,
+    current_user: User = Depends(get_current_user),
 ) -> DatasetPreview:
-    session = _get_session_or_404(session_id)
+    session = _get_session_or_404(session_id, current_user)
     if file is None:
         raise HTTPException(status_code=422, detail="A file to merge is required.")
 
-    raw = await file.read()
+    raw = await limits.read_upload(file)
     try:
         ingest = load_file(raw, file.filename or "merge_upload.csv")
     except ValueError as exc:

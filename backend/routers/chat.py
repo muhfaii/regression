@@ -9,7 +9,7 @@ from backend.middleware import get_current_user
 from backend.models.user import User
 from backend.schemas.chat import ChatRequest, ChatResponse
 from backend.schemas.conversation import MessageResponse
-from backend.services import conversation_repo, llm as llm_service, session_store
+from backend.services import conversation_repo, limits, llm as llm_service, session_store
 from backend.services.column_inference import _classify_type
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -65,6 +65,7 @@ async def chat(
     req: ChatRequest,
     current_user: User = Depends(get_current_user),
 ) -> ChatResponse:
+    limits.chat_by_user.check(current_user.id)
     conv = await conversation_repo.get_conversation(req.conversation_id, current_user.id)
     if conv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
