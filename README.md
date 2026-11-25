@@ -96,7 +96,8 @@ type-check and build on every pull request.
 - **Backend**: Render builds the `Dockerfile` and deploys on push via its own
   GitHub integration (`render.yaml`). Set the backend env vars above on the
   Render service.
-- **Database**: apply new migrations before deploying code that needs them:
+- **Database**: the deploy workflow applies pending D1 migrations before
+  deploying the Worker. To apply them by hand:
 
   ```bash
   npx wrangler d1 migrations apply infera-db --remote
