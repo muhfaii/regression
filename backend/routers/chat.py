@@ -9,7 +9,7 @@ from backend.middleware import get_current_user
 from backend.models.user import User
 from backend.schemas.chat import ChatRequest, ChatResponse
 from backend.schemas.conversation import MessageResponse
-from backend.services import conversation_repo, llm as llm_service, session_store
+from backend.services import conversation_repo, limits, llm as llm_service, session_store
 from backend.services.column_inference import _classify_type
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -34,8 +34,8 @@ def _to_msg_response(msg) -> MessageResponse:
     )
 
 
-def _build_session_info(conv_id: str) -> dict | None:
-    session = session_store.find_session_for_conversation(conv_id)
+async def _build_session_info(conv_id: str) -> dict | None:
+    session = await session_store.find_session_for_conversation(conv_id)
     if session is None:
         return None
     df = session.df
@@ -65,6 +65,7 @@ async def chat(
     req: ChatRequest,
     current_user: User = Depends(get_current_user),
 ) -> ChatResponse:
+    limits.chat_by_user.check(current_user.id)
     conv = await conversation_repo.get_conversation(req.conversation_id, current_user.id)
     if conv is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
@@ -83,7 +84,7 @@ async def chat(
     )
 
     # Build context and call LLM
-    session_info = _build_session_info(req.conversation_id)
+    session_info = await _build_session_info(req.conversation_id)
     all_messages = list(messages) + [user_msg]
     try:
         llm_text = await llm_service.generate_chat_response(all_messages, session_info)

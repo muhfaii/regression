@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from backend.middleware import get_current_user
 from backend.models.user import User
@@ -10,6 +10,7 @@ from backend.schemas.auth import (
     RegisterRequest,
     UserResponse,
 )
+from backend.services import limits
 from backend.services.auth import (
     create_access_token,
     hash_password,
@@ -21,7 +22,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest) -> AuthResponse:
+async def register(body: RegisterRequest, request: Request) -> AuthResponse:
+    limits.register_by_ip.check(limits.client_ip(request))
     existing = await get_user_by_email(body.email)
     if existing is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
@@ -40,7 +42,9 @@ async def register(body: RegisterRequest) -> AuthResponse:
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(body: LoginRequest) -> AuthResponse:
+async def login(body: LoginRequest, request: Request) -> AuthResponse:
+    limits.login_by_ip.check(limits.client_ip(request))
+    limits.login_by_email.check(body.email.lower())
     user = await get_user_by_email(body.email)
 
     if user is None or not verify_password(body.password, user.password_hash):

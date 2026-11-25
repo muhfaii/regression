@@ -1,7 +1,7 @@
 """Analysis endpoints: /api/analysis/*"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.analysis_modules import (
     anova,
@@ -23,6 +23,8 @@ from backend.analysis_modules import (
     timeseries,
     t_tests,
 )
+from backend.middleware import get_current_user
+from backend.models.user import User
 from backend.schemas.analysis import RunRequest, ValidateConfigRequest
 from backend.schemas.results import AnalysisResult
 from backend.services import session_store
@@ -95,8 +97,8 @@ _SLOT_TYPES: dict[str, dict[str, str]] = {
 
 
 @router.post("/run", response_model=AnalysisResult)
-async def run_analysis(req: RunRequest) -> AnalysisResult:
-    session = session_store.get_session(req.session_id)
+async def run_analysis(req: RunRequest, current_user: User = Depends(get_current_user)) -> AnalysisResult:
+    session = await session_store.get_owned_session(req.session_id, current_user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
@@ -111,8 +113,8 @@ async def run_analysis(req: RunRequest) -> AnalysisResult:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {exc}")
 
-    session_store.save_result(req.session_id, result.result_id, result.__dict__)
-    session_store.log_step(
+    await session_store.save_result(req.session_id, result.result_id, result.__dict__)
+    await session_store.log_step(
         req.session_id, "Analysis",
         f"Ran {result.test_name} (N = {result.n_obs}).",
     )
@@ -135,8 +137,8 @@ async def run_analysis(req: RunRequest) -> AnalysisResult:
 
 
 @router.post("/validate-config")
-async def validate_config(req: ValidateConfigRequest) -> dict:
-    session = session_store.get_session(req.session_id)
+async def validate_config(req: ValidateConfigRequest, current_user: User = Depends(get_current_user)) -> dict:
+    session = await session_store.get_owned_session(req.session_id, current_user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
@@ -171,8 +173,9 @@ async def validate_config(req: ValidateConfigRequest) -> dict:
 
 
 @router.get("/results/{result_id}")
-async def get_result(session_id: str, result_id: str) -> dict:
-    result = session_store.get_result(session_id, result_id)
+async def get_result(session_id: str, result_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    session = await session_store.get_owned_session(session_id, current_user.id)
+    result = session.results.get(result_id) if session else None
     if result is None:
         raise HTTPException(status_code=404, detail="Result not found.")
     return result

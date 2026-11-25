@@ -3,7 +3,7 @@ Data structure detection — classifies an uploaded DataFrame as cross-sectional
 panel, time-series, or ambiguous.
 
 Covers: spec §5.1 (detection logic), §5.2 (heuristics), §5.3 (user confirmation
-data — the confirmation UI lives in app.py).
+data).
 
 Detection approach
 ──────────────────
