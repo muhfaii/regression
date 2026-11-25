@@ -1,6 +1,6 @@
 """
 Regression pipelines — encapsulate the decision trees for cross-sectional
-and panel data so app.py just calls the right pipeline and gets a uniform
+and panel data so callers just call the right pipeline and get a uniform
 result object.
 
 Cross-sectional pipeline:
@@ -74,7 +74,7 @@ class PipelineResult:
     # The entity/time column names (panel only)
     entity_col: str | None = None
     time_col: str | None = None
-    # Robust SE override passed from app.py (e.g. "HC3", "CR1", or None/"Auto")
+    # Robust SE override chosen by the caller (e.g. "HC3", "CR1", or None/"Auto")
     robust_se_override: str | None = None
 
 

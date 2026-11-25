@@ -1,7 +1,8 @@
 """Thin async client for Cloudflare D1's HTTP REST API.
 
-Containers can't use the native Workers `env.DB` binding, so D1 is reached
-over HTTP instead. Credentials come from env vars set by the deploy pipeline.
+The backend runs on Render, outside the Workers runtime, so it can't use the
+native `env.DB` binding and reaches D1 over HTTP instead. Credentials come from
+env vars set on the Render service.
 """
 from __future__ import annotations
 
