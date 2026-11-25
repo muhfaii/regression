@@ -19,16 +19,16 @@ from regassist.ingest import _collect_warnings, _describe_column, load_file
 router = APIRouter(prefix="/api/dataprep", tags=["dataprep"])
 
 
-def _get_session_or_404(session_id: str, user: User) -> Session:
-    session = session_store.get_owned_session(session_id, user.id)
+async def _get_session_or_404(session_id: str, user: User) -> Session:
+    session = await session_store.get_owned_session(session_id, user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
     return session
 
 
-def _apply_and_respond(session: Session, session_id: str, new_df, message: str) -> DatasetPreview:
-    session_store.update_session_df(session_id, new_df)
-    session_store.log_step(session_id, "Data prep", message)
+async def _apply_and_respond(session: Session, session_id: str, new_df, message: str) -> DatasetPreview:
+    await session_store.update_session_df(session_id, new_df)
+    await session_store.log_step(session_id, "Data prep", message)
     ingest_cols = [_describe_column(new_df[c], len(new_df)) for c in new_df.columns]
     columns = column_inference.infer_columns(new_df, ingest_cols)
     context = dataset_context.infer_context(columns)
@@ -45,48 +45,48 @@ def _apply_and_respond(session: Session, session_id: str, new_df, message: str) 
 
 @router.post("/missing", response_model=DatasetPreview)
 async def apply_missing(req: MissingDataRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id, current_user)
+    session = await _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.apply_missing_strategy(session.df, req.columns, req.strategy, req.constant)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return _apply_and_respond(session, req.session_id, new_df, message)
+    return await _apply_and_respond(session, req.session_id, new_df, message)
 
 
 @router.post("/recode", response_model=DatasetPreview)
 async def recode(req: RecodeRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id, current_user)
+    session = await _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.recode_column(
             session.df, req.source_column, req.new_column_name, req.mapping, req.default, req.overwrite,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return _apply_and_respond(session, req.session_id, new_df, message)
+    return await _apply_and_respond(session, req.session_id, new_df, message)
 
 
 @router.post("/compute", response_model=DatasetPreview)
 async def compute(req: ComputeRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id, current_user)
+    session = await _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.compute_column(
             session.df, req.new_column_name, req.expression, req.overwrite,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return _apply_and_respond(session, req.session_id, new_df, message)
+    return await _apply_and_respond(session, req.session_id, new_df, message)
 
 
 @router.post("/reverse-score", response_model=DatasetPreview)
 async def reverse_score(req: ReverseScoreRequest, current_user: User = Depends(get_current_user)) -> DatasetPreview:
-    session = _get_session_or_404(req.session_id, current_user)
+    session = await _get_session_or_404(req.session_id, current_user)
     try:
         new_df, message = dataprep.reverse_score(
             session.df, req.columns, req.min_value, req.max_value, req.suffix, req.overwrite,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return _apply_and_respond(session, req.session_id, new_df, message)
+    return await _apply_and_respond(session, req.session_id, new_df, message)
 
 
 @router.post("/merge", response_model=DatasetPreview)
@@ -98,7 +98,7 @@ async def merge(
     file: UploadFile = None,
     current_user: User = Depends(get_current_user),
 ) -> DatasetPreview:
-    session = _get_session_or_404(session_id, current_user)
+    session = await _get_session_or_404(session_id, current_user)
     if file is None:
         raise HTTPException(status_code=422, detail="A file to merge is required.")
 
@@ -112,4 +112,4 @@ async def merge(
         new_df, message = dataprep.merge_datasets(session.df, ingest.df, left_on, right_on, how)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    return _apply_and_respond(session, session_id, new_df, message)
+    return await _apply_and_respond(session, session_id, new_df, message)

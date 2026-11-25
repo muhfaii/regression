@@ -34,8 +34,8 @@ def _to_msg_response(msg) -> MessageResponse:
     )
 
 
-def _build_session_info(conv_id: str) -> dict | None:
-    session = session_store.find_session_for_conversation(conv_id)
+async def _build_session_info(conv_id: str) -> dict | None:
+    session = await session_store.find_session_for_conversation(conv_id)
     if session is None:
         return None
     df = session.df
@@ -84,7 +84,7 @@ async def chat(
     )
 
     # Build context and call LLM
-    session_info = _build_session_info(req.conversation_id)
+    session_info = await _build_session_info(req.conversation_id)
     all_messages = list(messages) + [user_msg]
     try:
         llm_text = await llm_service.generate_chat_response(all_messages, session_info)

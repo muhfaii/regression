@@ -76,10 +76,10 @@ async def upload_file(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    session_id = session_store.create_session(
+    session_id = await session_store.create_session(
         df, filename, user_id=current_user.id, conversation_id=conversation_id
     )
-    session_store.log_step(
+    await session_store.log_step(
         session_id, "Import",
         f"Imported '{filename}' ({ingest.row_count} rows, {len(ingest.columns)} columns).",
     )
@@ -123,10 +123,10 @@ async def paste_data(
         for c in df.columns
     ]
     ingest = IngestResult(df=df, row_count=len(df), columns=cols)
-    session_id = session_store.create_session(
+    session_id = await session_store.create_session(
         df, "pasted_data.csv", user_id=current_user.id, conversation_id=conversation_id
     )
-    session_store.log_step(
+    await session_store.log_step(
         session_id, "Import",
         f"Imported pasted data ({ingest.row_count} rows, {len(ingest.columns)} columns).",
     )
@@ -163,10 +163,10 @@ async def load_sample(
         raise HTTPException(status_code=422, detail=str(exc))
 
     df = ingest.df
-    session_id = session_store.create_session(
+    session_id = await session_store.create_session(
         df, sample["file"], user_id=current_user.id, conversation_id=conversation_id
     )
-    session_store.log_step(
+    await session_store.log_step(
         session_id, "Import",
         f"Loaded sample dataset '{sample['label']}' ({ingest.row_count} rows, {len(ingest.columns)} columns).",
     )

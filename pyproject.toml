@@ -26,6 +26,8 @@ dependencies = [
     "bcrypt>=5.0.0",
     "pydantic[email]>=2.13.4",
     "httpx>=0.28.1",
+    "pyarrow>=17",
+    "boto3>=1.35",
 ]
 
 [project.optional-dependencies]

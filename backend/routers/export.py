@@ -32,7 +32,7 @@ _SKIP_STAT_KEYS = frozenset({
 async def export_word(
     result_id: str, session_id: str, current_user: User = Depends(get_current_user)
 ) -> StreamingResponse:
-    session = session_store.get_owned_session(session_id, current_user.id)
+    session = await session_store.get_owned_session(session_id, current_user.id)
     raw = session.results.get(result_id) if session else None
     if raw is None:
         raise HTTPException(status_code=404, detail="Result not found.")
@@ -56,7 +56,7 @@ async def export_word(
 async def create_share_link(
     result_id: str, session_id: str, current_user: User = Depends(get_current_user)
 ) -> dict:
-    session = session_store.get_owned_session(session_id, current_user.id)
+    session = await session_store.get_owned_session(session_id, current_user.id)
     raw = session.results.get(result_id) if session else None
     if raw is None:
         raise HTTPException(status_code=404, detail="Result not found.")
@@ -80,7 +80,7 @@ async def get_shared_result(token: str) -> dict:
 
 @router.get("/api/export/log/{session_id}")
 async def get_session_log(session_id: str, current_user: User = Depends(get_current_user)) -> dict:
-    session = session_store.get_owned_session(session_id, current_user.id)
+    session = await session_store.get_owned_session(session_id, current_user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
     return {"filename": session.filename, "steps": session.steps}
@@ -90,7 +90,7 @@ async def get_session_log(session_id: str, current_user: User = Depends(get_curr
 async def download_session_log(
     session_id: str, current_user: User = Depends(get_current_user)
 ) -> StreamingResponse:
-    session = session_store.get_owned_session(session_id, current_user.id)
+    session = await session_store.get_owned_session(session_id, current_user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
@@ -111,7 +111,7 @@ async def download_session_log(
 async def export_report(
     session_id: str, body: dict | None = None, current_user: User = Depends(get_current_user)
 ) -> StreamingResponse:
-    session = session_store.get_owned_session(session_id, current_user.id)
+    session = await session_store.get_owned_session(session_id, current_user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
@@ -141,7 +141,7 @@ async def export_report(
 async def create_session_share_link(
     session_id: str, body: dict | None = None, current_user: User = Depends(get_current_user)
 ) -> dict:
-    session = session_store.get_owned_session(session_id, current_user.id)
+    session = await session_store.get_owned_session(session_id, current_user.id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found or expired.")
 
@@ -151,13 +151,13 @@ async def create_session_share_link(
         raise HTTPException(status_code=422, detail="No results to share.")
 
     token = str(uuid.uuid4())
-    session_store.save_share_session(token, {"filename": session.filename, "results": results})
+    await session_store.save_share_session(token, {"filename": session.filename, "results": results})
     return {"token": token, "url": f"/share/session/{token}"}
 
 
 @router.get("/api/share/session/{token}")
 async def get_shared_session(token: str) -> dict:
-    bundle = session_store.get_share_session(token)
+    bundle = await session_store.get_share_session(token)
     if bundle is None:
         raise HTTPException(status_code=404, detail="Share link not found.")
     return bundle
